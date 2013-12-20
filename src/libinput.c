@@ -39,6 +39,14 @@
 
 #define TOUCHPAD_MAX_BUTTONS 7 /* three buttons, 4 scroll buttons */
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
+#define TOUCH_MAX_SLOTS 15
+/*
+   libinput does not provide axis information for absolute devices, instead
+   it scales into the screen dimensions provided. So we set up the axes with
+   a fixed range, let libinput scale into that range and then the server
+   do the scaling it usually does.
+ */
+#define TOUCH_AXIS_MAX 0xffff
 
 struct xf86libinput {
 	char *path;
@@ -205,12 +213,47 @@ xf86libinput_init_keyboard(InputInfoPtr pInfo)
 }
 
 static void
+xf86libinput_init_touch(InputInfoPtr pInfo)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int min, max, res;
+	unsigned char btnmap[TOUCHPAD_MAX_BUTTONS + 1];
+	Atom btnlabels[TOUCHPAD_MAX_BUTTONS];
+	Atom axislabels[TOUCHPAD_NUM_AXES];
+
+	init_button_map(btnmap, ARRAY_SIZE(btnmap));
+	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
+	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
+
+	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
+				TOUCHPAD_MAX_BUTTONS,
+				btnlabels,
+				xf86libinput_ptr_ctl,
+				GetMotionHistorySize(),
+				TOUCHPAD_NUM_AXES,
+				axislabels);
+	min = 0;
+	max = TOUCH_AXIS_MAX;
+	res = 0;
+
+	xf86InitValuatorAxisStruct(dev, 0,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_X),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	xf86InitValuatorAxisStruct(dev, 1,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	InitTouchClassDeviceStruct(dev, TOUCH_MAX_SLOTS, XIDirectTouch, 2);
+
+}
+
+static void
 xf86libinput_handle_added_device(InputInfoPtr pInfo,
 				 struct libinput_event_added_device *event)
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	driver_data->device = libinput_event_added_device_get_device(event);
 }
+
 
 static void
 xf86libinput_handle_capability(InputInfoPtr pInfo,
@@ -228,6 +271,7 @@ xf86libinput_handle_capability(InputInfoPtr pInfo,
 			xf86libinput_init_pointer(pInfo);
 			break;
 		case LIBINPUT_DEVICE_CAP_TOUCH:
+			xf86libinput_init_touch(pInfo);
 			break;
 	}
 }
@@ -368,6 +412,46 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer_axis 
 }
 
 static void
+xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch_touch *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int type;
+	int slot;
+	ValuatorMask *m;
+
+	/* libinput doesn't give us hw touch ids which X expects, so
+	   emulate them here */
+	static int next_touchid;
+	static int touchids[TOUCH_MAX_SLOTS] = {0};
+
+
+	slot = libinput_event_touch_touch_get_slot(event);
+
+	switch (libinput_event_touch_touch_get_touch_type(event)) {
+		case LIBINPUT_TOUCH_TYPE_DOWN:
+			type = XI_TouchBegin;
+			touchids[slot] = next_touchid++;
+			break;
+		case LIBINPUT_TOUCH_TYPE_UP:
+			type = XI_TouchEnd;
+			break;
+		case LIBINPUT_TOUCH_TYPE_MOTION:
+			type = XI_TouchUpdate;
+			break;
+		default:
+			 return;
+	};
+
+	m = valuator_mask_new(2);
+	valuator_mask_set_double(m, 0,
+			li_fixed_to_double(libinput_event_touch_touch_get_x(event)));
+	valuator_mask_set_double(m, 1,
+			li_fixed_to_double(libinput_event_touch_touch_get_y(event)));
+
+	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
+}
+
+static void
 xf86libinput_handle_event(InputInfoPtr pInfo,
 			  struct libinput_event *event)
 {
@@ -376,6 +460,8 @@ xf86libinput_handle_event(InputInfoPtr pInfo,
 		case LIBINPUT_EVENT_REMOVED_SEAT:
 		case LIBINPUT_EVENT_ADDED_DEVICE:
 		case LIBINPUT_EVENT_REMOVED_DEVICE:
+		case LIBINPUT_EVENT_DEVICE_REGISTER_CAPABILITY:
+		case LIBINPUT_EVENT_DEVICE_UNREGISTER_CAPABILITY:
 			break;
 
 		case LIBINPUT_EVENT_POINTER_MOTION:
@@ -390,7 +476,8 @@ xf86libinput_handle_event(InputInfoPtr pInfo,
 		case LIBINPUT_EVENT_POINTER_AXIS:
 			xf86libinput_handle_axis(pInfo, (struct libinput_event_pointer_axis*)event);
 			break;
-		default:
+		case LIBINPUT_EVENT_TOUCH_TOUCH:
+			xf86libinput_handle_touch(pInfo, (struct libinput_event_touch_touch*)event);
 			break;
 	}
 }
@@ -432,9 +519,18 @@ close_restricted(int fd, void *data)
 	close(fd);
 }
 
+static void
+get_screen_dimensions(struct libinput_device *device,
+		      int *width, int *height, void *userdata)
+{
+	*width = TOUCH_AXIS_MAX;
+	*height = TOUCH_AXIS_MAX;
+}
+
 const struct libinput_interface interface = {
     .open_restricted = open_restricted,
     .close_restricted = close_restricted,
+    .get_current_screen_dimensions = get_screen_dimensions,
 };
 
 static int xf86libinput_pre_init(InputDriverPtr drv,
