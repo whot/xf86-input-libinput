@@ -351,6 +351,23 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard_key *
 }
 
 static void
+xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer_axis *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int axis;
+	li_fixed_t value;
+
+	if (libinput_event_pointer_axis_get_axis(event) ==
+			LIBINPUT_POINTER_AXIS_VERTICAL_SCROLL)
+		axis = 3;
+	else
+		axis = 4;
+
+	value = libinput_event_pointer_axis_get_value(event);
+	xf86PostMotionEvent(dev, Relative, axis, 1, li_fixed_to_int(value));
+}
+
+static void
 xf86libinput_handle_event(InputInfoPtr pInfo,
 			  struct libinput_event *event)
 {
@@ -369,6 +386,9 @@ xf86libinput_handle_event(InputInfoPtr pInfo,
 			break;
 		case LIBINPUT_EVENT_KEYBOARD_KEY:
 			xf86libinput_handle_key(pInfo, (struct libinput_event_keyboard_key*)event);
+			break;
+		case LIBINPUT_EVENT_POINTER_AXIS:
+			xf86libinput_handle_axis(pInfo, (struct libinput_event_pointer_axis*)event);
 			break;
 		default:
 			break;
@@ -435,6 +455,9 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	driver_data = calloc(1, sizeof(*driver_data));
 	if (!driver_data)
 		goto fail;
+
+	driver_data->scroll_vdist = 1;
+	driver_data->scroll_hdist = 1;
 
 	device = xf86SetStrOption(pInfo->options, "Device", NULL);
 	if (!device)
