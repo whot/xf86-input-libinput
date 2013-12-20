@@ -300,6 +300,7 @@ xf86libinput_init(DeviceIntPtr dev)
 
 		event = libinput_get_event(libinput);
 		switch(libinput_event_get_type(event)) {
+			case LIBINPUT_EVENT_NONE:
 			case LIBINPUT_EVENT_ADDED_SEAT:
 			case LIBINPUT_EVENT_REMOVED_SEAT:
 			case LIBINPUT_EVENT_REMOVED_DEVICE:
@@ -456,6 +457,7 @@ xf86libinput_handle_event(InputInfoPtr pInfo,
 			  struct libinput_event *event)
 {
 	switch (libinput_event_get_type(event)) {
+		case LIBINPUT_EVENT_NONE:
 		case LIBINPUT_EVENT_ADDED_SEAT:
 		case LIBINPUT_EVENT_REMOVED_SEAT:
 		case LIBINPUT_EVENT_ADDED_DEVICE:
