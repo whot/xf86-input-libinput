@@ -48,9 +48,15 @@
  */
 #define TOUCH_AXIS_MAX 0xffff
 
+struct xf86libinput_driver {
+	struct libinput *libinput;
+	int device_count;
+};
+
+static struct xf86libinput_driver driver_context;
+
 struct xf86libinput {
 	char *path;
-	struct libinput *libinput;
 	struct libinput_device *device;
 
 	int scroll_vdist;
@@ -71,10 +77,15 @@ xf86libinput_on(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput *libinput = driver_data->libinput;
+	struct libinput *libinput = driver_context.libinput;
+	struct libinput_device *device = driver_data->device;
 
-	if (pInfo->fd == -1 && libinput_resume(libinput) < 0)
+	device = libinput_path_add_device(libinput, driver_data->path);
+	if (!device)
 		return !Success;
+	libinput_device_ref(device);
+	libinput_device_set_user_data(device, pInfo);
+	driver_data->device = device;
 
 	pInfo->fd = libinput_get_fd(libinput);
 	/* Can't use xf86AddEnabledDevice here */
@@ -89,12 +100,15 @@ xf86libinput_off(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput *libinput = driver_data->libinput;
 
-	libinput_suspend(libinput);
 	RemoveEnabledDevice(pInfo->fd);
 	pInfo->fd = -1;
 	dev->public.on = FALSE;
+
+	libinput_path_remove_device(driver_data->device);
+	libinput_device_unref(driver_data->device);
+	driver_data->device = NULL;
+
 	return Success;
 }
 
@@ -246,82 +260,28 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 
 }
 
-static void
-xf86libinput_handle_added_device(InputInfoPtr pInfo,
-				 struct libinput_event_added_device *event)
-{
-	struct xf86libinput *driver_data = pInfo->private;
-	driver_data->device = libinput_event_added_device_get_device(event);
-}
-
-
-static void
-xf86libinput_handle_capability(InputInfoPtr pInfo,
-			       struct libinput_event_device_register_capability *event)
-{
-	enum libinput_device_capability cap;
-
-	cap = libinput_event_device_register_capability_get_capability(event);
-
-	switch (cap) {
-		case LIBINPUT_DEVICE_CAP_KEYBOARD:
-			xf86libinput_init_keyboard(pInfo);
-			break;
-		case LIBINPUT_DEVICE_CAP_POINTER:
-			xf86libinput_init_pointer(pInfo);
-			break;
-		case LIBINPUT_DEVICE_CAP_TOUCH:
-			xf86libinput_init_touch(pInfo);
-			break;
-	}
-}
-
 static int
 xf86libinput_init(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput *libinput = driver_data->libinput;
-	enum libinput_event_type type;
+	struct libinput_device *device = driver_data->device;
 
 	dev->public.on = FALSE;
 
-	if (pInfo->fd == -1 && libinput_resume(libinput) < 0)
-		return !Success;
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
+		xf86libinput_init_keyboard(pInfo);
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
+		xf86libinput_init_pointer(pInfo);
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
+		xf86libinput_init_touch(pInfo);
 
-	/* seat and device event should be waiting already */
-	libinput_dispatch(libinput);
-
-	while ((type = libinput_next_event_type(libinput)) != LIBINPUT_EVENT_NONE) {
-		struct libinput_event *event;
-
-		if (type >= LIBINPUT_EVENT_KEYBOARD_KEY)
-			break;
-
-		event = libinput_get_event(libinput);
-		switch(libinput_event_get_type(event)) {
-			case LIBINPUT_EVENT_NONE:
-			case LIBINPUT_EVENT_ADDED_SEAT:
-			case LIBINPUT_EVENT_REMOVED_SEAT:
-			case LIBINPUT_EVENT_REMOVED_DEVICE:
-				break;
-			case LIBINPUT_EVENT_ADDED_DEVICE:
-				xf86libinput_handle_added_device(pInfo,
-						(struct libinput_event_added_device*)event);
-				break;
-			case LIBINPUT_EVENT_DEVICE_REGISTER_CAPABILITY:
-				xf86libinput_handle_capability(pInfo, (struct libinput_event_device_register_capability*)event);
-				break;
-			case LIBINPUT_EVENT_DEVICE_UNREGISTER_CAPABILITY:
-				break;
-			default:
-				break;
-		}
-	}
+	/* unref the device now, because we'll get a new ref during
+	   DEVICE_ON */
+	libinput_device_unref(device);
 
 	return 0;
 }
-
 
 static void
 xf86libinput_destroy(DeviceIntPtr dev)
@@ -352,13 +312,13 @@ xf86libinput_device_control(DeviceIntPtr dev, int mode)
 }
 
 static void
-xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer_motion *event)
+xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int x, y;
 
-	x = libinput_event_pointer_motion_get_dx(event);
-	y = libinput_event_pointer_motion_get_dy(event);
+	x = libinput_event_pointer_get_dx(event);
+	y = libinput_event_pointer_get_dy(event);
 
 	x = li_fixed_to_int(x);
 	y = li_fixed_to_int(y);
@@ -367,53 +327,53 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer_mot
 }
 
 static void
-xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer_button *event)
+xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int button;
 	int is_press;
 
-	switch(libinput_event_pointer_button_get_button(event)) {
+	switch(libinput_event_pointer_get_button(event)) {
 		case BTN_LEFT: button = 1; break;
 		case BTN_MIDDLE: button = 2; break;
 		case BTN_RIGHT: button = 3; break;
 		default: /* no touchpad actually has those buttons */
 			return;
 	}
-	is_press = (libinput_event_pointer_button_get_state(event) == LIBINPUT_POINTER_BUTTON_STATE_PRESSED);
+	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_POINTER_BUTTON_STATE_PRESSED);
 	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
 }
 
 static void
-xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard_key *event)
+xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int is_press;
-	int key = libinput_event_keyboard_key_get_key(event);
+	int key = libinput_event_keyboard_get_key(event);
 
-	is_press = (libinput_event_keyboard_key_get_state(event) == LIBINPUT_KEYBOARD_KEY_STATE_PRESSED);
+	is_press = (libinput_event_keyboard_get_key_state(event) == LIBINPUT_KEYBOARD_KEY_STATE_PRESSED);
 	xf86PostKeyboardEvent(dev, key, is_press);
 }
 
 static void
-xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer_axis *event)
+xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int axis;
 	li_fixed_t value;
 
-	if (libinput_event_pointer_axis_get_axis(event) ==
+	if (libinput_event_pointer_get_axis(event) ==
 			LIBINPUT_POINTER_AXIS_VERTICAL_SCROLL)
 		axis = 3;
 	else
 		axis = 4;
 
-	value = libinput_event_pointer_axis_get_value(event);
+	value = libinput_event_pointer_get_axis_value(event);
 	xf86PostMotionEvent(dev, Relative, axis, 1, li_fixed_to_int(value));
 }
 
 static void
-xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch_touch *event)
+xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int type;
@@ -425,10 +385,9 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch_touch 
 	static int next_touchid;
 	static int touchids[TOUCH_MAX_SLOTS] = {0};
 
+	slot = libinput_event_touch_get_slot(event);
 
-	slot = libinput_event_touch_touch_get_slot(event);
-
-	switch (libinput_event_touch_touch_get_touch_type(event)) {
+	switch (libinput_event_touch_get_touch_type(event)) {
 		case LIBINPUT_TOUCH_TYPE_DOWN:
 			type = XI_TouchBegin;
 			touchids[slot] = next_touchid++;
@@ -445,41 +404,52 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch_touch 
 
 	m = valuator_mask_new(2);
 	valuator_mask_set_double(m, 0,
-			li_fixed_to_double(libinput_event_touch_touch_get_x(event)));
+			li_fixed_to_double(libinput_event_touch_get_x(event)));
 	valuator_mask_set_double(m, 1,
-			li_fixed_to_double(libinput_event_touch_touch_get_y(event)));
+			li_fixed_to_double(libinput_event_touch_get_y(event)));
 
 	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
 }
 
 static void
-xf86libinput_handle_event(InputInfoPtr pInfo,
-			  struct libinput_event *event)
+xf86libinput_handle_event(struct libinput_event *event)
 {
+	struct libinput_device *device;
+	InputInfoPtr pInfo;
+
+	device = libinput_event_get_device(event);
+	pInfo = libinput_device_get_user_data(device);
+
 	switch (libinput_event_get_type(event)) {
 		case LIBINPUT_EVENT_NONE:
-		case LIBINPUT_EVENT_ADDED_SEAT:
-		case LIBINPUT_EVENT_REMOVED_SEAT:
-		case LIBINPUT_EVENT_ADDED_DEVICE:
-		case LIBINPUT_EVENT_REMOVED_DEVICE:
-		case LIBINPUT_EVENT_DEVICE_REGISTER_CAPABILITY:
-		case LIBINPUT_EVENT_DEVICE_UNREGISTER_CAPABILITY:
+		case LIBINPUT_EVENT_DEVICE_ADDED:
+		case LIBINPUT_EVENT_DEVICE_REMOVED:
+			break;
+		case LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE:
+			/* FIXME */
 			break;
 
 		case LIBINPUT_EVENT_POINTER_MOTION:
-			xf86libinput_handle_motion(pInfo, (struct libinput_event_pointer_motion*)event);
+			xf86libinput_handle_motion(pInfo,
+						   libinput_event_get_pointer_event(event));
 			break;
 		case LIBINPUT_EVENT_POINTER_BUTTON:
-			xf86libinput_handle_button(pInfo, (struct libinput_event_pointer_button*)event);
+			xf86libinput_handle_button(pInfo,
+						   libinput_event_get_pointer_event(event));
 			break;
 		case LIBINPUT_EVENT_KEYBOARD_KEY:
-			xf86libinput_handle_key(pInfo, (struct libinput_event_keyboard_key*)event);
+			xf86libinput_handle_key(pInfo,
+						libinput_event_get_keyboard_event(event));
 			break;
 		case LIBINPUT_EVENT_POINTER_AXIS:
-			xf86libinput_handle_axis(pInfo, (struct libinput_event_pointer_axis*)event);
+			xf86libinput_handle_axis(pInfo,
+						 libinput_event_get_pointer_event(event));
+			break;
+		case LIBINPUT_EVENT_TOUCH_FRAME:
 			break;
 		case LIBINPUT_EVENT_TOUCH_TOUCH:
-			xf86libinput_handle_touch(pInfo, (struct libinput_event_touch_touch*)event);
+			xf86libinput_handle_touch(pInfo,
+						  libinput_event_get_touch_event(event));
 			break;
 	}
 }
@@ -488,8 +458,7 @@ xf86libinput_handle_event(InputInfoPtr pInfo,
 static void
 xf86libinput_read_input(InputInfoPtr pInfo)
 {
-	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput *libinput = driver_data->libinput;
+	struct libinput *libinput = driver_context.libinput;
 	int rc;
 	struct libinput_event *event;
 
@@ -503,7 +472,7 @@ xf86libinput_read_input(InputInfoPtr pInfo)
 	}
 
 	while ((event = libinput_get_event(libinput))) {
-		xf86libinput_handle_event(pInfo, event);
+		xf86libinput_handle_event(event);
 		libinput_event_destroy(event);
 	}
 }
@@ -541,7 +510,10 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 {
 	struct xf86libinput *driver_data = NULL;
         struct libinput *libinput = NULL;
-	char *device;
+	struct libinput_device *device;
+	char *path;
+
+	driver_context.device_count++;
 
 	pInfo->fd = -1;
 	pInfo->type_name = XI_TOUCHPAD;
@@ -557,28 +529,39 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	driver_data->scroll_vdist = 1;
 	driver_data->scroll_hdist = 1;
 
-	device = xf86SetStrOption(pInfo->options, "Device", NULL);
-	if (!device)
+	path = xf86SetStrOption(pInfo->options, "Device", NULL);
+	if (!path)
 		goto fail;
 
-        libinput = libinput_create_from_path(&interface, pInfo, device);
+	if (!driver_context.libinput)
+		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
+	libinput = driver_context.libinput;
+
 	if (libinput == NULL) {
-		xf86IDrvMsg(pInfo, X_ERROR, "Creating a touchpad for %s failed\n", device);
+		xf86IDrvMsg(pInfo, X_ERROR, "Creating a device for %s failed\n", path);
 		goto fail;
 	}
 
-        pInfo->fd = libinput_get_fd(libinput);
+	device = libinput_path_add_device(libinput, path);
+	if (!device) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
+		goto fail;
+	}
+
+	/* We ref the device but remove it afterwards. The hope is that
+	   between now and DEVICE_INIT/DEVICE_ON, the device doesn't change.
+	  */
+	libinput_device_ref(device);
+	libinput_path_remove_device(device);
+
 	pInfo->private = driver_data;
-	driver_data->libinput = libinput;
-	driver_data->path = device;
+	driver_data->path = path;
+	driver_data->device = device;
 
 	return Success;
 
 fail:
-        if (libinput)
-            libinput_destroy(libinput);
-
-	free(device);
+	free(path);
 	free(driver_data);
 	return BadValue;
 }
@@ -590,7 +573,10 @@ xf86libinput_uninit(InputDriverPtr drv,
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	if (driver_data) {
-		libinput_destroy(driver_data->libinput);
+		if (--driver_context.device_count == 0) {
+			libinput_destroy(driver_context.libinput);
+			driver_context.libinput = NULL;
+		}
 		free(driver_data->path);
 		free(driver_data);
 		pInfo->private = NULL;
