@@ -40,6 +40,8 @@
 #define TOUCHPAD_MAX_BUTTONS 7 /* three buttons, 4 scroll buttons */
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TOUCH_MAX_SLOTS 15
+#define XORG_KEYCODE_OFFSET 8
+
 /*
    libinput does not provide axis information for absolute devices, instead
    it scales into the screen dimensions provided. So we set up the axes with
@@ -350,6 +352,8 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *even
 	DeviceIntPtr dev = pInfo->dev;
 	int is_press;
 	int key = libinput_event_keyboard_get_key(event);
+
+	key += XORG_KEYCODE_OFFSET;
 
 	is_press = (libinput_event_keyboard_get_key_state(event) == LIBINPUT_KEYBOARD_KEY_STATE_PRESSED);
 	xf86PostKeyboardEvent(dev, key, is_press);
