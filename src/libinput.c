@@ -32,6 +32,7 @@
 #include <unistd.h>
 #include <xorg-server.h>
 #include <exevents.h>
+#include <xkbsrv.h>
 #include <xf86Xinput.h>
 #include <xserver-properties.h>
 #include <libinput.h>
@@ -223,9 +224,17 @@ static void
 xf86libinput_init_keyboard(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev= pInfo->dev;
+	XkbRMLVOSet rmlvo = {0};
 
-	InitKeyboardDeviceStruct(dev, NULL, NULL,
+	rmlvo.rules = xf86SetStrOption(pInfo->options, "xkb_rules", "evdev");
+	rmlvo.model = xf86SetStrOption(pInfo->options, "xkb_model", "pc104");
+	rmlvo.layout = xf86SetStrOption(pInfo->options, "xkb_layout", "us");
+	rmlvo.variant = xf86SetStrOption(pInfo->options, "xkb_variant", NULL);
+	rmlvo.options = xf86SetStrOption(pInfo->options, "xkb_options", NULL);
+
+	InitKeyboardDeviceStruct(dev, &rmlvo, NULL,
 				 xf86libinput_kbd_ctrl);
+	XkbFreeRMLVOSet(&rmlvo, FALSE);
 }
 
 static void
@@ -586,7 +595,6 @@ xf86libinput_uninit(InputDriverPtr drv,
 		pInfo->private = NULL;
 	}
 }
-
 
 InputDriverRec xf86libinput_driver = {
 	.driverVersion	= 1,
