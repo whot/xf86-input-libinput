@@ -54,6 +54,7 @@
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_count;
+	int device_enabled_count;
 };
 
 static struct xf86libinput_driver driver_context;
@@ -91,8 +92,13 @@ xf86libinput_on(DeviceIntPtr dev)
 	driver_data->device = device;
 
 	pInfo->fd = libinput_get_fd(libinput);
-	/* Can't use xf86AddEnabledDevice on an epollfd */
-	AddEnabledDevice(pInfo->fd);
+
+	if (driver_context.device_enabled_count == 0) {
+		/* Can't use xf86AddEnabledDevice on an epollfd */
+		AddEnabledDevice(pInfo->fd);
+	}
+
+	driver_context.device_enabled_count++;
 	dev->public.on = TRUE;
 
 	return Success;
@@ -104,7 +110,10 @@ xf86libinput_off(DeviceIntPtr dev)
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
 
-	RemoveEnabledDevice(pInfo->fd);
+	if (--driver_context.device_enabled_count == 0) {
+		RemoveEnabledDevice(pInfo->fd);
+	}
+
 	pInfo->fd = -1;
 	dev->public.on = FALSE;
 
@@ -432,6 +441,9 @@ xf86libinput_handle_event(struct libinput_event *event)
 
 	device = libinput_event_get_device(event);
 	pInfo = libinput_device_get_user_data(device);
+
+	if (pInfo && !pInfo->dev->public.on)
+		return;
 
 	switch (libinput_event_get_type(event)) {
 		case LIBINPUT_EVENT_NONE:
