@@ -91,7 +91,7 @@ xf86libinput_on(DeviceIntPtr dev)
 	driver_data->device = device;
 
 	pInfo->fd = libinput_get_fd(libinput);
-	/* Can't use xf86AddEnabledDevice here */
+	/* Can't use xf86AddEnabledDevice on an epollfd */
 	AddEnabledDevice(pInfo->fd);
 	dev->public.on = TRUE;
 
