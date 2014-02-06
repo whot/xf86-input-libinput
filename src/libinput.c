@@ -401,6 +401,7 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event
 	int type;
 	int slot;
 	ValuatorMask *m;
+	li_fixed_t val;
 
 	/* libinput doesn't give us hw touch ids which X expects, so
 	   emulate them here */
@@ -425,10 +426,12 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event
 	};
 
 	m = valuator_mask_new(2);
-	valuator_mask_set_double(m, 0,
-			li_fixed_to_double(libinput_event_touch_get_x(event)));
-	valuator_mask_set_double(m, 1,
-			li_fixed_to_double(libinput_event_touch_get_y(event)));
+
+	val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
+	valuator_mask_set_double(m, 0, li_fixed_to_double(val));
+
+	val = libinput_event_touch_get_y_transformed(event, TOUCH_AXIS_MAX);
+	valuator_mask_set_double(m, 1, li_fixed_to_double(val));
 
 	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
 }
@@ -515,18 +518,9 @@ close_restricted(int fd, void *data)
 	close(fd);
 }
 
-static void
-get_screen_dimensions(struct libinput_device *device,
-		      int *width, int *height, void *userdata)
-{
-	*width = TOUCH_AXIS_MAX;
-	*height = TOUCH_AXIS_MAX;
-}
-
 const struct libinput_interface interface = {
     .open_restricted = open_restricted,
     .close_restricted = close_restricted,
-    .get_current_screen_dimensions = get_screen_dimensions,
 };
 
 static int xf86libinput_pre_init(InputDriverPtr drv,
