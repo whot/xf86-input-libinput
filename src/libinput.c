@@ -51,6 +51,12 @@
  */
 #define TOUCH_AXIS_MAX 0xffff
 
+/*
+   libinput scales wheel events by DEFAULT_AXIS_STEP_DISTANCE, which is
+   currently 10.
+ */
+#define DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE 10
+
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_count;
@@ -390,7 +396,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	else
 		axis = 4;
 
-	value = libinput_event_pointer_get_axis_value(event);
+	value = libinput_event_pointer_get_axis_value(event) / DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE;
 	xf86PostMotionEvent(dev, Relative, axis, 1, li_fixed_to_int(value));
 }
 
