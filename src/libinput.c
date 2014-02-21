@@ -580,6 +580,7 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	libinput_device_ref(device);
 	libinput_path_remove_device(device);
 
+	pInfo->fd = -1;
 	pInfo->private = driver_data;
 	driver_data->path = path;
 	driver_data->device = device;
