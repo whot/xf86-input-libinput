@@ -228,7 +228,8 @@ xf86libinput_kbd_ctrl(DeviceIntPtr device, KeybdCtrl *ctrl)
     struct libinput_device *ldevice = driver_data->device;
 
     while (bits[i].xbit) {
-	    leds |= !!(ctrl->leds & bits[i].xbit);
+	    if (ctrl->leds & bits[i].xbit)
+		    leds |= bits[i].code;
 	    i++;
     }
 
