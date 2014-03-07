@@ -402,7 +402,9 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 }
 
 static void
-xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event)
+xf86libinput_handle_touch(InputInfoPtr pInfo,
+			  struct libinput_event_touch *event,
+			  enum libinput_event_type event_type)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int type;
@@ -417,15 +419,15 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event
 
 	slot = libinput_event_touch_get_slot(event);
 
-	switch (libinput_event_touch_get_touch_type(event)) {
-		case LIBINPUT_TOUCH_TYPE_DOWN:
+	switch (event_type) {
+		case LIBINPUT_EVENT_TOUCH_DOWN:
 			type = XI_TouchBegin;
 			touchids[slot] = next_touchid++;
 			break;
-		case LIBINPUT_TOUCH_TYPE_UP:
+		case LIBINPUT_EVENT_TOUCH_UP:
 			type = XI_TouchEnd;
 			break;
-		case LIBINPUT_TOUCH_TYPE_MOTION:
+		case LIBINPUT_EVENT_TOUCH_MOTION:
 			type = XI_TouchUpdate;
 			break;
 		default:
@@ -482,9 +484,13 @@ xf86libinput_handle_event(struct libinput_event *event)
 			break;
 		case LIBINPUT_EVENT_TOUCH_FRAME:
 			break;
-		case LIBINPUT_EVENT_TOUCH_TOUCH:
+		case LIBINPUT_EVENT_TOUCH_UP:
+		case LIBINPUT_EVENT_TOUCH_DOWN:
+		case LIBINPUT_EVENT_TOUCH_MOTION:
+		case LIBINPUT_EVENT_TOUCH_CANCEL:
 			xf86libinput_handle_touch(pInfo,
-						  libinput_event_get_touch_event(event));
+						  libinput_event_get_touch_event(event),
+						  libinput_event_get_type(event));
 			break;
 	}
 }
