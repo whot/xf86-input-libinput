@@ -429,7 +429,7 @@ xf86libinput_handle_touch(InputInfoPtr pInfo, struct libinput_event_touch *event
 			type = XI_TouchUpdate;
 			break;
 		default:
-			 return;
+			return;
 	};
 
 	m = valuator_mask_new(2);
