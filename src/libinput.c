@@ -436,11 +436,13 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 
 	m = valuator_mask_new(2);
 
-	val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
-	valuator_mask_set_double(m, 0, li_fixed_to_double(val));
+	if (event_type != LIBINPUT_EVENT_TOUCH_UP) {
+		val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
+		valuator_mask_set_double(m, 0, li_fixed_to_double(val));
 
-	val = libinput_event_touch_get_y_transformed(event, TOUCH_AXIS_MAX);
-	valuator_mask_set_double(m, 1, li_fixed_to_double(val));
+		val = libinput_event_touch_get_y_transformed(event, TOUCH_AXIS_MAX);
+		valuator_mask_set_double(m, 1, li_fixed_to_double(val));
+	}
 
 	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
 }
