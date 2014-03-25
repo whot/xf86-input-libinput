@@ -350,7 +350,8 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	x = li_fixed_to_int(x);
 	y = li_fixed_to_int(y);
 
-	xf86PostMotionEvent(dev, Relative, 0, 2, x, y);
+	if (x || y)
+		xf86PostMotionEvent(dev, Relative, 0, 2, x, y);
 }
 
 static void
