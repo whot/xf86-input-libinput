@@ -80,6 +80,8 @@ struct xf86libinput {
 		double x_remainder;
 		double y_remainder;
 	} scale;
+
+	ValuatorMask *valuators;
 };
 
 static int
@@ -342,16 +344,18 @@ static void
 xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
-	int x, y;
+	struct xf86libinput *driver_data = pInfo->private;
+	ValuatorMask *mask = driver_data->valuators;
+	li_fixed_t fx, fy;
 
-	x = libinput_event_pointer_get_dx(event);
-	y = libinput_event_pointer_get_dy(event);
+	fx = libinput_event_pointer_get_dx(event);
+	fy = libinput_event_pointer_get_dy(event);
 
-	x = li_fixed_to_int(x);
-	y = li_fixed_to_int(y);
+	valuator_mask_zero(mask);
+	valuator_mask_set_double(mask, 0, li_fixed_to_double(fx));
+	valuator_mask_set_double(mask, 1, li_fixed_to_double(fy));
 
-	if (x || y)
-		xf86PostMotionEvent(dev, Relative, 0, 2, x, y);
+	xf86PostMotionEventM(dev, Relative, mask);
 }
 
 static void
@@ -389,6 +393,8 @@ static void
 xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	ValuatorMask *mask = driver_data->valuators;
 	int axis;
 	li_fixed_t value;
 
@@ -399,7 +405,11 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 		axis = 4;
 
 	value = libinput_event_pointer_get_axis_value(event) / DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE;
-	xf86PostMotionEvent(dev, Relative, axis, 1, li_fixed_to_int(value));
+
+	valuator_mask_zero(mask);
+	valuator_mask_set_double(mask, axis, li_fixed_to_double(value));
+
+	xf86PostMotionEventM(dev, Relative, mask);
 }
 
 static void
@@ -408,9 +418,10 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 			  enum libinput_event_type event_type)
 {
 	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
 	int type;
 	int slot;
-	ValuatorMask *m;
+	ValuatorMask *m = driver_data->valuators;
 	li_fixed_t val;
 
 	/* libinput doesn't give us hw touch ids which X expects, so
@@ -434,8 +445,6 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 		default:
 			return;
 	};
-
-	m = valuator_mask_new(2);
 
 	if (event_type != LIBINPUT_EVENT_TOUCH_UP) {
 		val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
@@ -561,6 +570,10 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	if (!driver_data)
 		goto fail;
 
+	driver_data->valuators = valuator_mask_new(2);
+	if (!driver_data->valuators)
+		goto fail;
+
 	driver_data->scroll_vdist = 1;
 	driver_data->scroll_hdist = 1;
 
@@ -597,6 +610,8 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	return Success;
 
 fail:
+	if (driver_data->valuators)
+		valuator_mask_free(&driver_data->valuators);
 	free(path);
 	free(driver_data);
 	return BadValue;
@@ -613,6 +628,7 @@ xf86libinput_uninit(InputDriverPtr drv,
 			libinput_destroy(driver_context.libinput);
 			driver_context.libinput = NULL;
 		}
+		valuator_mask_free(&driver_data->valuators);
 		free(driver_data->path);
 		free(driver_data);
 		pInfo->private = NULL;
