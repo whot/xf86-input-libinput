@@ -446,6 +446,8 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 			return;
 	};
 
+	valuator_mask_zero(m);
+
 	if (event_type != LIBINPUT_EVENT_TOUCH_UP) {
 		val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
 		valuator_mask_set_double(m, 0, li_fixed_to_double(val));
