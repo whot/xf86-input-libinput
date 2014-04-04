@@ -636,6 +636,7 @@ xf86libinput_uninit(InputDriverPtr drv,
 		free(driver_data);
 		pInfo->private = NULL;
 	}
+	xf86DeleteInput(pInfo, flags);
 }
 
 InputDriverRec xf86libinput_driver = {
