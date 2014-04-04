@@ -125,6 +125,7 @@ xf86libinput_off(DeviceIntPtr dev)
 	pInfo->fd = -1;
 	dev->public.on = FALSE;
 
+	libinput_device_set_user_data(driver_data->device, NULL);
 	libinput_path_remove_device(driver_data->device);
 	libinput_device_unref(driver_data->device);
 	driver_data->device = NULL;
