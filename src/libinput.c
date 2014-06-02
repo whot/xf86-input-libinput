@@ -347,14 +347,14 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	DeviceIntPtr dev = pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
-	li_fixed_t fx, fy;
+	double x, y;
 
-	fx = libinput_event_pointer_get_dx(event);
-	fy = libinput_event_pointer_get_dy(event);
+	x = libinput_event_pointer_get_dx(event);
+	y = libinput_event_pointer_get_dy(event);
 
 	valuator_mask_zero(mask);
-	valuator_mask_set_double(mask, 0, li_fixed_to_double(fx));
-	valuator_mask_set_double(mask, 1, li_fixed_to_double(fy));
+	valuator_mask_set_double(mask, 0, x);
+	valuator_mask_set_double(mask, 1, y);
 
 	xf86PostMotionEventM(dev, Relative, mask);
 }
@@ -397,7 +397,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
 	int axis;
-	li_fixed_t value;
+	double value;
 
 	if (libinput_event_pointer_get_axis(event) ==
 			LIBINPUT_POINTER_AXIS_VERTICAL_SCROLL)
@@ -408,7 +408,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	value = libinput_event_pointer_get_axis_value(event) / DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE;
 
 	valuator_mask_zero(mask);
-	valuator_mask_set_double(mask, axis, li_fixed_to_double(value));
+	valuator_mask_set_double(mask, axis, value);
 
 	xf86PostMotionEventM(dev, Relative, mask);
 }
@@ -423,7 +423,7 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 	int type;
 	int slot;
 	ValuatorMask *m = driver_data->valuators;
-	li_fixed_t val;
+	double val;
 
 	/* libinput doesn't give us hw touch ids which X expects, so
 	   emulate them here */
@@ -451,10 +451,10 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 
 	if (event_type != LIBINPUT_EVENT_TOUCH_UP) {
 		val = libinput_event_touch_get_x_transformed(event, TOUCH_AXIS_MAX);
-		valuator_mask_set_double(m, 0, li_fixed_to_double(val));
+		valuator_mask_set_double(m, 0, val);
 
 		val = libinput_event_touch_get_y_transformed(event, TOUCH_AXIS_MAX);
-		valuator_mask_set_double(m, 1, li_fixed_to_double(val));
+		valuator_mask_set_double(m, 1, val);
 	}
 
 	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
