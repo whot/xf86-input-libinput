@@ -403,7 +403,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 			LIBINPUT_POINTER_AXIS_VERTICAL_SCROLL)
 		axis = 3;
 	else
-		axis = 4;
+		axis = 2;
 
 	value = libinput_event_pointer_get_axis_value(event) / DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE;
 
