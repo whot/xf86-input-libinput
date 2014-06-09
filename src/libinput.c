@@ -373,7 +373,7 @@ xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 		default: /* no touchpad actually has those buttons */
 			return;
 	}
-	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_POINTER_BUTTON_STATE_PRESSED);
+	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
 	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
 }
 
