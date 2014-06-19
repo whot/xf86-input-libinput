@@ -386,7 +386,7 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *even
 
 	key += XORG_KEYCODE_OFFSET;
 
-	is_press = (libinput_event_keyboard_get_key_state(event) == LIBINPUT_KEYBOARD_KEY_STATE_PRESSED);
+	is_press = (libinput_event_keyboard_get_key_state(event) == LIBINPUT_KEY_STATE_PRESSED);
 	xf86PostKeyboardEvent(dev, key, is_press);
 }
 
@@ -400,7 +400,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	double value;
 
 	if (libinput_event_pointer_get_axis(event) ==
-			LIBINPUT_POINTER_AXIS_VERTICAL_SCROLL)
+			LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL)
 		axis = 3;
 	else
 		axis = 2;
@@ -628,7 +628,7 @@ xf86libinput_uninit(InputDriverPtr drv,
 	struct xf86libinput *driver_data = pInfo->private;
 	if (driver_data) {
 		if (--driver_context.device_count == 0) {
-			libinput_destroy(driver_context.libinput);
+			libinput_unref(driver_context.libinput);
 			driver_context.libinput = NULL;
 		}
 		valuator_mask_free(&driver_data->valuators);
