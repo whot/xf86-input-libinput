@@ -59,7 +59,6 @@
 
 struct xf86libinput_driver {
 	struct libinput *libinput;
-	int device_count;
 	int device_enabled_count;
 };
 
@@ -560,8 +559,6 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	struct libinput_device *device;
 	char *path;
 
-	driver_context.device_count++;
-
 	pInfo->fd = -1;
 	pInfo->type_name = XI_TOUCHPAD;
 	pInfo->device_control = xf86libinput_device_control;
@@ -586,6 +583,9 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 
 	if (!driver_context.libinput)
 		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
+	else
+		libinput_ref(driver_context.libinput);
+
 	libinput = driver_context.libinput;
 
 	if (libinput == NULL) {
@@ -627,10 +627,7 @@ xf86libinput_uninit(InputDriverPtr drv,
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	if (driver_data) {
-		if (--driver_context.device_count == 0) {
-			libinput_unref(driver_context.libinput);
-			driver_context.libinput = NULL;
-		}
+		driver_context.libinput = libinput_unref(driver_context.libinput);
 		valuator_mask_free(&driver_data->valuators);
 		free(driver_data->path);
 		free(driver_data);
