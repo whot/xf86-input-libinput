@@ -56,8 +56,7 @@ AC_ARG_WITH(xorg-module-dir,
 inputdir=${moduledir}/input
 AC_SUBST(inputdir)
 
-# X Server SDK location is required to install evdev header files
-# This location is also relayed in the xorg-evdev.pc file
+# X Server SDK location is required to install header files
 sdkdir=`$PKG_CONFIG --variable=sdkdir xorg-server`
 
 # Workaround overriding sdkdir to be able to create a tarball when user has no
