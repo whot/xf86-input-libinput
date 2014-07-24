@@ -1,6 +1,0 @@
-sdkdir=@sdkdir@
-
-Name: xorg-libinput
-Description: X.Org libinput input driver.
-Version: @PACKAGE_VERSION@
-Cflags: -I${sdkdir}

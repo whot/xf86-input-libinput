@@ -69,6 +69,5 @@ DRIVER_NAME=libinput
 AC_SUBST([DRIVER_NAME])
 
 AC_CONFIG_FILES([Makefile
-                 src/Makefile
-                 xorg-libinput.pc])
+                 src/Makefile])
 AC_OUTPUT
