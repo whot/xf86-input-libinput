@@ -38,6 +38,8 @@
 #include <libinput.h>
 #include <linux/input.h>
 
+#include <X11/Xatom.h>
+
 #define TOUCHPAD_MAX_BUTTONS 7 /* three buttons, 4 scroll buttons */
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TOUCH_MAX_SLOTS 15
@@ -82,6 +84,12 @@ struct xf86libinput {
 
 	ValuatorMask *valuators;
 };
+
+static int
+LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
+                 BOOL checkonly);
+static void
+LibinputInitProperty(DeviceIntPtr dev);
 
 static int
 xf86libinput_on(DeviceIntPtr dev)
@@ -308,6 +316,9 @@ xf86libinput_init(DeviceIntPtr dev)
 	/* unref the device now, because we'll get a new ref during
 	   DEVICE_ON */
 	libinput_device_unref(device);
+
+        LibinputInitProperty(dev);
+        XIRegisterPropertyHandler(dev, LibinputSetProperty, NULL, NULL);
 
 	return 0;
 }
@@ -673,3 +684,272 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 };
 
 
+
+/* Property support */
+
+/* Tapping enabled/disabled: BOOL, 1 value */
+#define PROP_TAP "libinput Tapping Enabled"
+/* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
+#define PROP_CALIBRATION "libinput Calibration Matrix"
+/* Pointer accel speed: FLOAT, 1 value, 32 bit */
+#define PROP_ACCEL "libinput Accel Speed"
+/* Natural scrolling: BOOL, 1 value */
+#define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
+/* Send-events mode: 32-bit int, 1 value */
+#define PROP_SENDEVENTS "libinput Send Events Mode"
+
+static Atom prop_float; /* server-defined */
+static Atom prop_tap;
+static Atom prop_calibration;
+static Atom prop_accel;
+static Atom prop_natural_scroll;
+static Atom prop_sendevents;
+
+static inline int
+LibinputSetPropertyTap(DeviceIntPtr dev,
+                       Atom atom,
+                       XIPropertyValuePtr val,
+                       BOOL checkonly,
+		       struct libinput_device *device)
+{
+	BOOL* data;
+
+	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+	if (checkonly) {
+		if (*data != 0 && *data != 1)
+			return BadValue;
+
+		if (libinput_device_config_tap_get_finger_count(device) == 0)
+			return BadMatch;
+	} else {
+		libinput_device_config_tap_set_enabled(device, *data);
+	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertyCalibration(DeviceIntPtr dev,
+                               Atom atom,
+                               XIPropertyValuePtr val,
+			       BOOL checkonly,
+			       struct libinput_device *device)
+{
+	float* data;
+
+	if (val->format != 32 || val->size != 9 || val->type != prop_float)
+		return BadMatch;
+
+	data = (float*)val->data;
+
+	if (checkonly) {
+		if (data[6] != 0 ||
+		    data[7] != 0 ||
+		    data[8] != 1)
+			return BadValue;
+
+		if (!libinput_device_config_calibration_has_matrix(device))
+			return BadMatch;
+	} else {
+		libinput_device_config_calibration_set_matrix(device, data);
+	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertyAccel(DeviceIntPtr dev,
+			 Atom atom,
+			 XIPropertyValuePtr val,
+			 BOOL checkonly,
+			 struct libinput_device *device)
+{
+	float* data;
+
+	if (val->format != 32 || val->size != 1 || val->type != prop_float)
+		return BadMatch;
+
+	data = (float*)val->data;
+
+	if (checkonly) {
+		if (*data < -1 || *data > 1)
+			return BadValue;
+
+		if (libinput_device_config_accel_is_available(device) == 0)
+			return BadMatch;
+	} else {
+		libinput_device_config_accel_set_speed(device, *data);
+	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertyNaturalScroll(DeviceIntPtr dev,
+                                 Atom atom,
+                                 XIPropertyValuePtr val,
+                                 BOOL checkonly,
+                                 struct libinput_device *device)
+{
+	BOOL* data;
+
+	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+
+	if (checkonly) {
+		if (*data != 0 && *data != 1)
+			return BadValue;
+
+		if (libinput_device_config_scroll_has_natural_scroll(device) == 0)
+			return BadMatch;
+	} else {
+		libinput_device_config_scroll_set_natural_scroll_enabled(device, *data);
+	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertySendEvents(DeviceIntPtr dev,
+			      Atom atom,
+			      XIPropertyValuePtr val,
+			      BOOL checkonly,
+			      struct libinput_device *device)
+{
+	CARD32* data;
+
+	if (val->format != 32 || val->size != 1 || val->type != XA_CARDINAL)
+		return BadMatch;
+
+	data = (CARD32*)val->data;
+
+	if (checkonly) {
+		uint32_t supported = libinput_device_config_send_events_get_modes(device);
+		uint32_t new_mode = *data;
+
+		if ((new_mode | supported) != supported)
+			return BadValue;
+
+		/* Only one bit must be set */
+		if (!new_mode || ((new_mode & (new_mode - 1)) != 0))
+			return BadValue;
+	} else {
+		libinput_device_config_send_events_set_mode(device, *data);
+	}
+
+	return Success;
+}
+
+static int
+LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
+                 BOOL checkonly)
+{
+	InputInfoPtr pInfo  = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+
+	if (atom == prop_tap)
+		return LibinputSetPropertyTap(dev, atom, val, checkonly, device);
+	else if (atom == prop_calibration)
+		return LibinputSetPropertyCalibration(dev, atom, val,
+						      checkonly, device);
+	else if (atom == prop_accel)
+		return LibinputSetPropertyAccel(dev, atom, val,
+						checkonly, device);
+	else if (atom == prop_natural_scroll)
+		return LibinputSetPropertyNaturalScroll(dev, atom, val,
+							checkonly, device);
+	else if (atom == prop_sendevents)
+		return LibinputSetPropertySendEvents(dev, atom, val,
+						     checkonly, device);
+
+	return Success;
+}
+
+static void
+LibinputInitProperty(DeviceIntPtr dev)
+{
+	InputInfoPtr pInfo  = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	int rc;
+
+	prop_float = XIGetKnownProperty("FLOAT");
+
+	if (libinput_device_config_tap_get_finger_count(device) > 0) {
+		BOOL tap = libinput_device_config_tap_get_enabled(device);
+
+		prop_tap = MakeAtom(PROP_TAP, strlen(PROP_TAP), TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_tap, XA_INTEGER, 8,
+					    PropModeReplace, 1, &tap, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_tap, FALSE);
+	}
+
+	/* We use a 9-element matrix just to be closer to the X server's
+	   transformation matrix which also has the full matrix */
+	if (libinput_device_config_calibration_has_matrix(device)) {
+		float calibration[9];
+
+		libinput_device_config_calibration_get_matrix(device, calibration);
+		calibration[6] = 0;
+		calibration[7] = 0;
+		calibration[8] = 1;
+
+		prop_calibration = MakeAtom(PROP_CALIBRATION,
+					    strlen(PROP_CALIBRATION),
+					    TRUE);
+
+		rc = XIChangeDeviceProperty(dev, prop_calibration, prop_float, 32,
+					    PropModeReplace, 9, calibration, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_calibration, FALSE);
+	}
+
+	if (libinput_device_config_accel_is_available(device)) {
+		float speed = libinput_device_config_accel_get_speed(device);
+
+		prop_accel = MakeAtom(PROP_ACCEL, strlen(PROP_ACCEL), TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_accel, prop_float, 32,
+					    PropModeReplace, 1, &speed, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_accel, FALSE);
+	}
+
+	if (libinput_device_config_scroll_has_natural_scroll(device)) {
+		BOOL natural_scroll = libinput_device_config_scroll_get_natural_scroll_enabled(device);
+
+		prop_natural_scroll = MakeAtom(PROP_NATURAL_SCROLL,
+					       strlen(PROP_NATURAL_SCROLL),
+					       TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_natural_scroll, XA_INTEGER, 8,
+					    PropModeReplace, 1, &natural_scroll, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_natural_scroll, FALSE);
+	}
+
+	if (libinput_device_config_send_events_get_modes(device) !=
+		    LIBINPUT_CONFIG_SEND_EVENTS_ENABLED) {
+		uint32_t sendevents = libinput_device_config_send_events_get_mode(device);
+
+		prop_sendevents = MakeAtom(PROP_SENDEVENTS,
+					   strlen(PROP_SENDEVENTS),
+					   TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_sendevents,
+					    XA_CARDINAL, 32,
+					    PropModeReplace, 1, &sendevents, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_sendevents, FALSE);
+
+	}
+}
