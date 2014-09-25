@@ -875,9 +875,11 @@ static inline int
 LibinputSetPropertyTap(DeviceIntPtr dev,
                        Atom atom,
                        XIPropertyValuePtr val,
-                       BOOL checkonly,
-		       struct libinput_device *device)
+                       BOOL checkonly)
 {
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -891,7 +893,7 @@ LibinputSetPropertyTap(DeviceIntPtr dev,
 		if (libinput_device_config_tap_get_finger_count(device) == 0)
 			return BadMatch;
 	} else {
-		libinput_device_config_tap_set_enabled(device, *data);
+		driver_data->options.tapping = *data;
 	}
 
 	return Success;
@@ -901,9 +903,11 @@ static inline int
 LibinputSetPropertyCalibration(DeviceIntPtr dev,
                                Atom atom,
                                XIPropertyValuePtr val,
-			       BOOL checkonly,
-			       struct libinput_device *device)
+			       BOOL checkonly)
 {
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
 	float* data;
 
 	if (val->format != 32 || val->size != 9 || val->type != prop_float)
@@ -920,7 +924,9 @@ LibinputSetPropertyCalibration(DeviceIntPtr dev,
 		if (!libinput_device_config_calibration_has_matrix(device))
 			return BadMatch;
 	} else {
-		libinput_device_config_calibration_set_matrix(device, data);
+		memcpy(driver_data->options.matrix,
+		       data,
+		       sizeof(driver_data->options.matrix));
 	}
 
 	return Success;
@@ -930,9 +936,11 @@ static inline int
 LibinputSetPropertyAccel(DeviceIntPtr dev,
 			 Atom atom,
 			 XIPropertyValuePtr val,
-			 BOOL checkonly,
-			 struct libinput_device *device)
+			 BOOL checkonly)
 {
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
 	float* data;
 
 	if (val->format != 32 || val->size != 1 || val->type != prop_float)
@@ -947,7 +955,7 @@ LibinputSetPropertyAccel(DeviceIntPtr dev,
 		if (libinput_device_config_accel_is_available(device) == 0)
 			return BadMatch;
 	} else {
-		libinput_device_config_accel_set_speed(device, *data);
+		driver_data->options.speed = *data;
 	}
 
 	return Success;
@@ -957,9 +965,11 @@ static inline int
 LibinputSetPropertyNaturalScroll(DeviceIntPtr dev,
                                  Atom atom,
                                  XIPropertyValuePtr val,
-                                 BOOL checkonly,
-                                 struct libinput_device *device)
+                                 BOOL checkonly)
 {
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -974,7 +984,7 @@ LibinputSetPropertyNaturalScroll(DeviceIntPtr dev,
 		if (libinput_device_config_scroll_has_natural_scroll(device) == 0)
 			return BadMatch;
 	} else {
-		libinput_device_config_scroll_set_natural_scroll_enabled(device, *data);
+		driver_data->options.natural_scrolling = *data;
 	}
 
 	return Success;
@@ -984,9 +994,11 @@ static inline int
 LibinputSetPropertySendEvents(DeviceIntPtr dev,
 			      Atom atom,
 			      XIPropertyValuePtr val,
-			      BOOL checkonly,
-			      struct libinput_device *device)
+			      BOOL checkonly)
 {
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
 	CARD32* data;
 
 	if (val->format != 32 || val->size != 1 || val->type != XA_CARDINAL)
@@ -1005,7 +1017,7 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 		if (!new_mode || ((new_mode & (new_mode - 1)) != 0))
 			return BadValue;
 	} else {
-		libinput_device_config_send_events_set_mode(device, *data);
+		driver_data->options.sendevents = *data;
 	}
 
 	return Success;
@@ -1015,28 +1027,28 @@ static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
 {
-	InputInfoPtr pInfo  = dev->public.devicePrivate;
-	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->device;
+	int rc;
 
 	if (atom == prop_tap)
-		return LibinputSetPropertyTap(dev, atom, val, checkonly, device);
+		rc = LibinputSetPropertyTap(dev, atom, val, checkonly);
 	else if (atom == prop_calibration)
-		return LibinputSetPropertyCalibration(dev, atom, val,
-						      checkonly, device);
+		rc = LibinputSetPropertyCalibration(dev, atom, val,
+						    checkonly);
 	else if (atom == prop_accel)
-		return LibinputSetPropertyAccel(dev, atom, val,
-						checkonly, device);
+		rc = LibinputSetPropertyAccel(dev, atom, val, checkonly);
 	else if (atom == prop_natural_scroll)
-		return LibinputSetPropertyNaturalScroll(dev, atom, val,
-							checkonly, device);
+		rc = LibinputSetPropertyNaturalScroll(dev, atom, val, checkonly);
 	else if (atom == prop_sendevents)
-		return LibinputSetPropertySendEvents(dev, atom, val,
-						     checkonly, device);
+		rc = LibinputSetPropertySendEvents(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id)
 		return BadAccess; /* read-only */
+	else
+		return Success;
 
-	return Success;
+	if (!checkonly && rc == Success)
+		LibinputApplyConfig(dev);
+
+	return rc;
 }
 
 static void
