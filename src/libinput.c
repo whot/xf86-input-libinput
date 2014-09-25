@@ -83,6 +83,14 @@ struct xf86libinput {
 	} scale;
 
 	ValuatorMask *valuators;
+
+	struct {
+		BOOL tapping;
+		BOOL natural_scrolling;
+		CARD32 sendevents;
+		float speed;
+		float matrix[9];
+	} options;
 };
 
 static int
@@ -624,8 +632,114 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
 	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
 
-	return Success;
+	if (libinput_device_config_tap_get_finger_count(device) > 0) {
+		BOOL tap = xf86SetBoolOption(pInfo->options,
+					     "Tapping",
+					     libinput_device_config_tap_get_enabled(device));
+		if (libinput_device_config_tap_set_enabled(device, tap) !=
+		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set Tapping to %d\n",
+				    tap);
+			tap = libinput_device_config_tap_get_enabled(device);
+		}
+		driver_data->options.tapping = tap;
+	}
 
+	if (libinput_device_config_accel_is_available(device)) {
+		double speed = xf86SetRealOption(pInfo->options,
+						 "AccelSpeed",
+						 libinput_device_config_accel_get_speed(device));
+		if (libinput_device_config_accel_set_speed(device, speed) !=
+			    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Invalid speed %.2f, using 0 instead\n",
+				    speed);
+			driver_data->options.speed = libinput_device_config_accel_get_speed(device);
+		}
+		driver_data->options.speed = speed;
+	}
+
+	if (libinput_device_config_scroll_has_natural_scroll(device)) {
+		BOOL natural_scroll = xf86SetBoolOption(pInfo->options,
+							"NaturalScrolling",
+							libinput_device_config_scroll_get_natural_scroll_enabled(device));
+		if (libinput_device_config_scroll_set_natural_scroll_enabled(device,
+									     natural_scroll) !=
+			    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set NaturalScrolling to %d\n",
+				    natural_scroll);
+
+			natural_scroll = libinput_device_config_scroll_get_natural_scroll_enabled(device);
+		}
+		driver_data->options.natural_scrolling = natural_scroll;
+	}
+
+	if (libinput_device_config_send_events_get_modes(device) != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED) {
+		char *strmode;
+		enum libinput_config_send_events_mode mode =
+			libinput_device_config_send_events_get_mode(device);
+
+		strmode = xf86SetStrOption(pInfo->options,
+					   "SendEventsMode",
+					   NULL);
+		if (strmode) {
+			if (strcmp(strmode, "enabled") == 0)
+				mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
+			else if (strcmp(strmode, "disabled") == 0)
+				mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED;
+			else if (strcmp(strmode, "disabled-on-external-mouse") == 0)
+				mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE;
+			else
+				xf86IDrvMsg(pInfo, X_ERROR,
+					    "Invalid SendeventsMode: %s\n",
+					    strmode);
+		}
+
+		if (libinput_device_config_send_events_set_mode(device, mode) !=
+		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set SendEventsMode %d\n", mode);
+			mode = libinput_device_config_send_events_get_mode(device);
+		}
+		driver_data->options.sendevents = mode;
+		free(strmode);
+	}
+
+	if (libinput_device_config_calibration_has_matrix(device)) {
+		char *str;
+		float matrix[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+
+		libinput_device_config_calibration_get_matrix(device,
+							      matrix);
+		memcpy(driver_data->options.matrix, matrix, sizeof(matrix));
+
+		if ((str = xf86CheckStrOption(pInfo->options,
+					      "CalibrationMatrix",
+					      NULL))) {
+		    int num_calibration = sscanf(str, "%f %f %f %f %f %f %f %f %f ",
+						 &matrix[0], &matrix[1],
+						 &matrix[2], &matrix[3],
+						 &matrix[4], &matrix[5],
+						 &matrix[6], &matrix[7],
+						 &matrix[8]);
+		    if (num_calibration != 9) {
+			    xf86IDrvMsg(pInfo, X_ERROR,
+					"Invalid matrix: %s, using default\n",  str);
+		    } else if (libinput_device_config_calibration_set_matrix(device,
+									     matrix) ==
+			       LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			    memcpy(driver_data->options.matrix, matrix, sizeof(matrix));
+		    } else
+			    xf86IDrvMsg(pInfo, X_ERROR,
+					"Failed to apply matrix: %s, using default\n",  str);
+
+		    free(str);
+		}
+	}
+
+	return Success;
 fail:
 	if (driver_data->valuators)
 		valuator_mask_free(&driver_data->valuators);
@@ -891,7 +1005,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	prop_float = XIGetKnownProperty("FLOAT");
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0) {
-		BOOL tap = libinput_device_config_tap_get_enabled(device);
+		BOOL tap = driver_data->options.tapping;
 
 		prop_tap = MakeAtom(PROP_TAP, strlen(PROP_TAP), TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_tap, XA_INTEGER, 8,
@@ -923,7 +1037,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	}
 
 	if (libinput_device_config_accel_is_available(device)) {
-		float speed = libinput_device_config_accel_get_speed(device);
+		float speed = driver_data->options.speed;
 
 		prop_accel = MakeAtom(PROP_ACCEL, strlen(PROP_ACCEL), TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_accel, prop_float, 32,
@@ -934,7 +1048,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	}
 
 	if (libinput_device_config_scroll_has_natural_scroll(device)) {
-		BOOL natural_scroll = libinput_device_config_scroll_get_natural_scroll_enabled(device);
+		BOOL natural_scroll = driver_data->options.natural_scrolling;
 
 		prop_natural_scroll = MakeAtom(PROP_NATURAL_SCROLL,
 					       strlen(PROP_NATURAL_SCROLL),
@@ -948,7 +1062,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 
 	if (libinput_device_config_send_events_get_modes(device) !=
 		    LIBINPUT_CONFIG_SEND_EVENTS_ENABLED) {
-		uint32_t sendevents = libinput_device_config_send_events_get_mode(device);
+		uint32_t sendevents = driver_data->options.sendevents;
 
 		prop_sendevents = MakeAtom(PROP_SENDEVENTS,
 					   strlen(PROP_SENDEVENTS),
