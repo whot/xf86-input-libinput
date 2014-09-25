@@ -99,6 +99,53 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 static void
 LibinputInitProperty(DeviceIntPtr dev);
 
+static inline void
+LibinputApplyConfig(DeviceIntPtr dev)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+
+	if (libinput_device_config_send_events_get_modes(device) != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED &&
+	    libinput_device_config_send_events_set_mode(device,
+							driver_data->options.sendevents) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set SendEventsMode %d\n",
+			    driver_data->options.sendevents);
+
+	if (libinput_device_config_scroll_has_natural_scroll(device) &&
+	    libinput_device_config_scroll_set_natural_scroll_enabled(device,
+								     driver_data->options.natural_scrolling) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set NaturalScrolling to %d\n",
+			    driver_data->options.natural_scrolling);
+
+	if (libinput_device_config_accel_is_available(device) &&
+	    libinput_device_config_accel_set_speed(device,
+						   driver_data->options.speed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set speed %.2f\n",
+				    driver_data->options.speed);
+	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
+	    libinput_device_config_tap_set_enabled(device,
+						   driver_data->options.tapping) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set Tapping to %d\n",
+			    driver_data->options.tapping);
+
+	if (libinput_device_config_calibration_has_matrix(device) &&
+	    libinput_device_config_calibration_set_matrix(device,
+							  driver_data->options.matrix) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to apply matrix: "
+			    "%.2f %.2f %.2f %2.f %.2f %.2f %.2f %.2f %.2f\n",
+			    driver_data->options.matrix[0], driver_data->options.matrix[1],
+			    driver_data->options.matrix[2], driver_data->options.matrix[3],
+			    driver_data->options.matrix[4], driver_data->options.matrix[5],
+			    driver_data->options.matrix[6], driver_data->options.matrix[7],
+			    driver_data->options.matrix[8]);
+}
+
 static int
 xf86libinput_on(DeviceIntPtr dev)
 {
