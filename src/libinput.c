@@ -698,12 +698,17 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 /* Send-events mode: 32-bit int, 1 value */
 #define PROP_SENDEVENTS "libinput Send Events Mode"
 
-static Atom prop_float; /* server-defined */
+/* libinput-specific properties */
 static Atom prop_tap;
 static Atom prop_calibration;
 static Atom prop_accel;
 static Atom prop_natural_scroll;
 static Atom prop_sendevents;
+
+/* general properties */
+static Atom prop_float;
+static Atom prop_device;
+static Atom prop_product_id;
 
 static inline int
 LibinputSetPropertyTap(DeviceIntPtr dev,
@@ -867,6 +872,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 	else if (atom == prop_sendevents)
 		return LibinputSetPropertySendEvents(dev, atom, val,
 						     checkonly, device);
+	else if (atom == prop_device || atom == prop_product_id)
+		return BadAccess; /* read-only */
 
 	return Success;
 }
@@ -877,6 +884,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
 	struct libinput_device *device = driver_data->device;
+	const char *device_node;
+	CARD32 product[2];
 	int rc;
 
 	prop_float = XIGetKnownProperty("FLOAT");
@@ -952,4 +961,31 @@ LibinputInitProperty(DeviceIntPtr dev)
 		XISetDevicePropertyDeletable(dev, prop_sendevents, FALSE);
 
 	}
+
+	/* Device node property, read-only  */
+	device_node = driver_data->path;
+	prop_device = MakeAtom(XI_PROP_DEVICE_NODE,
+			       strlen(XI_PROP_DEVICE_NODE),
+			       TRUE);
+	rc = XIChangeDeviceProperty(dev, prop_device, XA_STRING, 8,
+				    PropModeReplace,
+				    strlen(device_node), device_node,
+				    FALSE);
+	if (rc != Success)
+		return;
+
+	XISetDevicePropertyDeletable(dev, prop_device, FALSE);
+
+
+	prop_product_id = MakeAtom(XI_PROP_PRODUCT_ID,
+				   strlen(XI_PROP_PRODUCT_ID),
+				   TRUE);
+	product[0] = libinput_device_get_id_vendor(device);
+	product[1] = libinput_device_get_id_product(device);
+	rc = XIChangeDeviceProperty(dev, prop_product_id, XA_INTEGER, 32,
+				    PropModeReplace, 2, product, FALSE);
+	if (rc != Success)
+		return;
+
+	XISetDevicePropertyDeletable(dev, prop_product_id, FALSE);
 }
