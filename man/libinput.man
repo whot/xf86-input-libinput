@@ -59,6 +59,14 @@ Enables left-handed button orientation, i.e. swapping left and right buttons.
 .BI "Option \*qNaturalScrolling\*q \*q" bool \*q
 Enables or disables natural scrolling behavior.
 .TP 7
+.BI "Option \*qScrollButton\*q \*q" int \*q
+Designates a button as scroll button. If the
+.BI ScrollMethod
+is
+.BI button
+and the button is logically held down, x/y axis movement is converted into
+scroll events.
+.TP 7
 .BI "Option \*qScrollMethod\*q \*q" string \*q
 Enables a scroll method. Permitted values are
 .BI none,

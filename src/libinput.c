@@ -88,11 +88,47 @@ struct xf86libinput {
 		BOOL natural_scrolling;
 		BOOL left_handed;
 		CARD32 sendevents;
+		CARD32 scroll_button; /* xorg button number */
 		float speed;
 		float matrix[9];
 		enum libinput_config_scroll_method scroll_method;
 	} options;
 };
+
+static inline unsigned int
+btn_linux2xorg(unsigned int b)
+{
+	unsigned int button;
+
+	switch(b) {
+	case 0: button = 0; break;
+	case BTN_LEFT: button = 1; break;
+	case BTN_MIDDLE: button = 2; break;
+	case BTN_RIGHT: button = 3; break;
+	default:
+		button = 8 + b - BTN_SIDE;
+		break;
+	}
+
+	return button;
+}
+static inline unsigned int
+btn_xorg2linux(unsigned int b)
+{
+	unsigned int button;
+
+	switch(b) {
+	case 0: button = 0; break;
+	case 1: button = BTN_LEFT; break;
+	case 2: button = BTN_MIDDLE; break;
+	case 3: button = BTN_RIGHT; break;
+	default:
+		button = b - 8 + BTN_SIDE;
+		break;
+	}
+
+	return button;
+}
 
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
@@ -169,6 +205,12 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    "Failed to set scroll to %s\n",
 			    method);
 	}
+
+	if (libinput_device_config_scroll_set_button(device,
+						     btn_xorg2linux(driver_data->options.scroll_button)) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set ScrollButton to %d\n",
+			    driver_data->options.scroll_button);
 }
 
 static int
@@ -918,6 +960,25 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		free(method);
 	}
 
+	if (libinput_device_config_scroll_get_methods(device) &
+	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
+		unsigned int b = btn_linux2xorg(libinput_device_config_scroll_get_button(device));
+		CARD32 scroll_button = xf86SetIntOption(pInfo->options,
+							"ScrollButton",
+							b);
+
+		b = btn_xorg2linux(scroll_button);
+
+		if (libinput_device_config_scroll_set_button(device,
+							     b) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set ScrollButton to %d\n",
+				    scroll_button);
+			scroll_button = btn_linux2xorg(libinput_device_config_scroll_get_button(device));
+		}
+		driver_data->options.scroll_button = scroll_button;
+	}
+
 	/* now pick an actual type */
 	if (libinput_device_config_tap_get_finger_count(device) > 0)
 		pInfo->type_name = XI_TOUCHPAD;
@@ -1007,6 +1068,8 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 /* Scroll method: BOOL, 3 values in order 2fg, edge, button
    only one is enabled at a time at max */
 #define PROP_SCROLL_METHODS "libinput Scroll Methods"
+/* Scroll button for button scrolling: 32-bit int, 1 value */
+#define PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
 
 /* libinput-specific properties */
 static Atom prop_tap;
@@ -1016,6 +1079,7 @@ static Atom prop_natural_scroll;
 static Atom prop_sendevents;
 static Atom prop_left_handed;
 static Atom prop_scroll_methods;
+static Atom prop_scroll_button;
 
 /* general properties */
 static Atom prop_float;
@@ -1242,6 +1306,36 @@ LibinputSetPropertyScrollMethods(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyScrollButton(DeviceIntPtr dev,
+				Atom atom,
+				XIPropertyValuePtr val,
+				BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	CARD32* data;
+
+	if (val->format != 32 || val->size != 1 || val->type != XA_CARDINAL)
+		return BadMatch;
+
+	data = (CARD32*)val->data;
+
+	if (checkonly) {
+		uint32_t button = *data;
+		uint32_t supported = libinput_device_has_button(device,
+								btn_xorg2linux(button));
+
+		if (button && !supported)
+			return BadValue;
+	} else {
+		driver_data->options.scroll_button = *data;
+	}
+
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -1263,6 +1357,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyLeftHanded(dev, atom, val, checkonly);
 	else if (atom == prop_scroll_methods)
 		rc = LibinputSetPropertyScrollMethods(dev, atom, val, checkonly);
+	else if (atom == prop_scroll_button)
+		rc = LibinputSetPropertyScrollButton(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id)
 		return BadAccess; /* read-only */
 	else
@@ -1405,7 +1501,22 @@ LibinputInitProperty(DeviceIntPtr dev)
 		if (rc != Success)
 			return;
 		XISetDevicePropertyDeletable(dev, prop_scroll_methods, FALSE);
+	}
 
+	if (libinput_device_config_scroll_get_methods(device) &
+	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
+		CARD32 scroll_button = driver_data->options.scroll_button;
+
+		prop_scroll_button = MakeAtom(PROP_SCROLL_BUTTON,
+					    strlen(PROP_SCROLL_BUTTON),
+					    TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_scroll_button,
+					    XA_CARDINAL, 32,
+					    PropModeReplace, 1,
+					    &scroll_button, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_scroll_button, FALSE);
 	}
 
 	/* Device node property, read-only  */
