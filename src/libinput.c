@@ -515,13 +515,7 @@ xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	int button;
 	int is_press;
 
-	switch(libinput_event_pointer_get_button(event)) {
-		case BTN_LEFT: button = 1; break;
-		case BTN_MIDDLE: button = 2; break;
-		case BTN_RIGHT: button = 3; break;
-		default: /* no touchpad actually has those buttons */
-			return;
-	}
+	button = btn_linux2xorg(libinput_event_pointer_get_button(event));
 	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
 	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
 }
