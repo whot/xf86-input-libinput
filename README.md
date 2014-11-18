@@ -1,9 +1,12 @@
 xf86-input-libinput - a libinput-based X driver
 ===============================================
 
+The official repository for this driver is
+http://cgit.freedesktop.org/xorg/driver/xf86-input-libinput/
+
 This is an X driver based on libinput. It is a thin wrapper around libinput,
 so while it does provide all features that libinput supports it does little
-beyond. It has no configuration options at the moment.
+beyond.
 
 ***WARNING: misconfiguration of an X input driver may leave you without
 usable input devices in your X session. Use with caution.***
@@ -48,4 +51,5 @@ Bugs
 Bugs in libinput go to the "libinput" component of wayland:
 https://bugs.freedesktop.org/enter_bug.cgi?product=Wayland
 
-For Bugs in this driver, send me an email
+Bugs in this driver go to the "Input/libinput" component of xorg:
+https://bugs.freedesktop.org/enter_bug.cgi?product=xorg
