@@ -53,6 +53,9 @@ A string of 9 space-separated floating point numbers.
 Sets the calibration matrix to the 3x3 matrix where the first row is (abc),
 the second row is (def) and the third row is (ghi).
 .TP 7
+.BI "Option \*qLeftHanded\*q \*q" bool \*q
+Enables left-handed button orientation, i.e. swapping left and right buttons.
+.TP 7
 .BI "Option \*qNaturalScrolling\*q \*q" bool \*q
 Enables or disables natural scrolling behavior.
 .TP 7

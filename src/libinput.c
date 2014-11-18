@@ -86,6 +86,7 @@ struct xf86libinput {
 	struct {
 		BOOL tapping;
 		BOOL natural_scrolling;
+		BOOL left_handed;
 		CARD32 sendevents;
 		float speed;
 		float matrix[9];
@@ -143,6 +144,12 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    driver_data->options.matrix[4], driver_data->options.matrix[5],
 			    driver_data->options.matrix[6], driver_data->options.matrix[7],
 			    driver_data->options.matrix[8]);
+
+	if (libinput_device_config_buttons_set_left_handed(device,
+							   driver_data->options.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set LeftHanded to %d\n",
+			    driver_data->options.left_handed);
 }
 
 static int
@@ -848,6 +855,21 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		}
 	}
 
+	if (libinput_device_config_buttons_has_left_handed(device)) {
+		BOOL left_handed = xf86SetBoolOption(pInfo->options,
+						     "LeftHanded",
+						     libinput_device_config_buttons_get_left_handed(device));
+		if (libinput_device_config_buttons_set_left_handed(device,
+								   left_handed) !=
+		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set LeftHanded to %d\n",
+				    left_handed);
+			left_handed = libinput_device_config_buttons_get_left_handed(device);
+		}
+		driver_data->options.left_handed = left_handed;
+	}
+
 	/* now pick an actual type */
 	if (libinput_device_config_tap_get_finger_count(device) > 0)
 		pInfo->type_name = XI_TOUCHPAD;
@@ -932,6 +954,8 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 #define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
 /* Send-events mode: 32-bit int, 1 value */
 #define PROP_SENDEVENTS "libinput Send Events Mode"
+/* Left-handed enabled/disabled: BOOL, 1 value */
+#define PROP_LEFT_HANDED "libinput Left Handed Enabled"
 
 /* libinput-specific properties */
 static Atom prop_tap;
@@ -939,6 +963,7 @@ static Atom prop_calibration;
 static Atom prop_accel;
 static Atom prop_natural_scroll;
 static Atom prop_sendevents;
+static Atom prop_left_handed;
 
 /* general properties */
 static Atom prop_float;
@@ -1097,6 +1122,35 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyLeftHanded(DeviceIntPtr dev,
+			      Atom atom,
+			      XIPropertyValuePtr val,
+			      BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	BOOL* data;
+
+	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+
+	if (checkonly) {
+		int supported = libinput_device_config_buttons_has_left_handed(device);
+		int left_handed = *data;
+
+		if (!supported && left_handed)
+			return BadValue;
+	} else {
+		driver_data->options.left_handed = *data;
+	}
+
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -1114,6 +1168,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyNaturalScroll(dev, atom, val, checkonly);
 	else if (atom == prop_sendevents)
 		rc = LibinputSetPropertySendEvents(dev, atom, val, checkonly);
+	else if (atom == prop_left_handed)
+		rc = LibinputSetPropertyLeftHanded(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id)
 		return BadAccess; /* read-only */
 	else
@@ -1207,6 +1263,20 @@ LibinputInitProperty(DeviceIntPtr dev)
 			return;
 		XISetDevicePropertyDeletable(dev, prop_sendevents, FALSE);
 
+	}
+
+	if (libinput_device_config_buttons_has_left_handed(device)) {
+		BOOL left_handed = driver_data->options.left_handed;
+
+		prop_left_handed = MakeAtom(PROP_LEFT_HANDED,
+					    strlen(PROP_LEFT_HANDED),
+					    TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_left_handed,
+					    XA_INTEGER, 8,
+					    PropModeReplace, 1, &left_handed, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_left_handed, FALSE);
 	}
 
 	/* Device node property, read-only  */
