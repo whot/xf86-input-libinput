@@ -246,10 +246,18 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	struct xf86libinput *driver_data = pInfo->private;
 	int min, max, res;
 	int nbuttons = 7;
+	int i;
 
 	unsigned char btnmap[MAX_BUTTONS + 1];
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
+
+	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
+		if (libinput_device_has_button(driver_data->device, i)) {
+			nbuttons += i - BTN_SIDE + 1;
+			break;
+		}
+	}
 
 	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
