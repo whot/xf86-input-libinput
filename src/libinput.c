@@ -626,7 +626,7 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	char *path;
 
 	pInfo->fd = -1;
-	pInfo->type_name = XI_TOUCHPAD;
+	pInfo->type_name = 0;
 	pInfo->device_control = xf86libinput_device_control;
 	pInfo->read_input = xf86libinput_read_input;
 	pInfo->control_proc = NULL;
@@ -785,6 +785,18 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		    free(str);
 		}
 	}
+
+	/* now pick an actual type */
+	if (libinput_device_config_tap_get_finger_count(device) > 0)
+		pInfo->type_name = XI_TOUCHPAD;
+	else if (libinput_device_has_capability(device,
+						LIBINPUT_DEVICE_CAP_TOUCH))
+		pInfo->type_name = XI_TOUCHSCREEN;
+	else if (libinput_device_has_capability(device,
+						LIBINPUT_DEVICE_CAP_POINTER))
+		pInfo->type_name = XI_MOUSE;
+	else
+		pInfo->type_name = XI_KEYBOARD;
 
 	return Success;
 fail:
