@@ -59,6 +59,15 @@ Enables left-handed button orientation, i.e. swapping left and right buttons.
 .BI "Option \*qNaturalScrolling\*q \*q" bool \*q
 Enables or disables natural scrolling behavior.
 .TP 7
+.BI "Option \*qScrollMethod\*q \*q" string \*q
+Enables a scroll method. Permitted values are
+.BI none,
+.BI twofinger,
+.BI edge,
+.BI button.
+Not all devices support all options, if an option is unsupported, the
+default scroll option for this device is used.
+.TP 7
 .BI "Option \*qSendEventsMode\*q \*q" (disabled|enabled|disabled-on-external-mouse) \*q
 Sets the send events mode to disabled, enabled, or "disable when an external
 mouse is connected".
