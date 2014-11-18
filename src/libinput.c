@@ -1042,7 +1042,7 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 			return BadValue;
 
 		/* Only one bit must be set */
-		if (!new_mode || ((new_mode & (new_mode - 1)) != 0))
+		if (new_mode && ((new_mode & (new_mode - 1)) != 0))
 			return BadValue;
 	} else {
 		driver_data->options.sendevents = *data;
