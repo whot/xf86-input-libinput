@@ -40,7 +40,6 @@
 
 #include <X11/Xatom.h>
 
-#define TOUCHPAD_MAX_BUTTONS 7 /* three buttons, 4 scroll buttons */
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TOUCH_MAX_SLOTS 15
 #define XORG_KEYCODE_OFFSET 8
@@ -214,6 +213,8 @@ init_button_map(unsigned char *btnmap, size_t size)
 static void
 init_button_labels(Atom *labels, size_t size)
 {
+	assert(size > 10);
+
 	memset(labels, 0, size * sizeof(Atom));
 	labels[0] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_LEFT);
 	labels[1] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_MIDDLE);
@@ -222,6 +223,10 @@ init_button_labels(Atom *labels, size_t size)
 	labels[4] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_WHEEL_DOWN);
 	labels[5] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_HWHEEL_LEFT);
 	labels[6] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_HWHEEL_RIGHT);
+	labels[7] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_SIDE);
+	labels[8] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_EXTRA);
+	labels[9] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_BACK);
+	labels[10] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_FORWARD);
 }
 
 static void
@@ -240,17 +245,19 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	DeviceIntPtr dev= pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
 	int min, max, res;
+	int nbuttons = 7;
 
-	unsigned char btnmap[TOUCHPAD_MAX_BUTTONS + 1];
-	Atom btnlabels[TOUCHPAD_MAX_BUTTONS];
+	unsigned char btnmap[MAX_BUTTONS + 1];
+	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
 	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
 
+
 	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
-				TOUCHPAD_MAX_BUTTONS,
+				nbuttons,
 				btnlabels,
 				xf86libinput_ptr_ctl,
 				GetMotionHistorySize(),
@@ -323,16 +330,17 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	int min, max, res;
-	unsigned char btnmap[TOUCHPAD_MAX_BUTTONS + 1];
-	Atom btnlabels[TOUCHPAD_MAX_BUTTONS];
+	unsigned char btnmap[MAX_BUTTONS + 1];
+	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
+	int nbuttons = 7;
 
 	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
 
 	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
-				TOUCHPAD_MAX_BUTTONS,
+				nbuttons,
 				btnlabels,
 				xf86libinput_ptr_ctl,
 				GetMotionHistorySize(),
