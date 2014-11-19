@@ -692,6 +692,7 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	driver_data->path = path;
 	driver_data->device = device;
 
+	/* Disable acceleration in the server, libinput does it for us */
 	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
 	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
 
