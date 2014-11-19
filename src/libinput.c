@@ -632,6 +632,45 @@ const struct libinput_interface interface = {
     .close_restricted = close_restricted,
 };
 
+static void
+xf86libinput_log_handler(struct libinput *libinput,
+			 enum libinput_log_priority priority,
+			 const char *format,
+			 va_list args)
+	_X_ATTRIBUTE_PRINTF(3, 0);
+
+static void
+xf86libinput_log_handler(struct libinput *libinput,
+			 enum libinput_log_priority priority,
+			 const char *format,
+			 va_list args)
+{
+	MessageType type;
+	int verbosity;
+
+	switch(priority) {
+	case LIBINPUT_LOG_PRIORITY_DEBUG:
+		type = X_DEBUG;
+		verbosity = 10;
+		break;
+	case LIBINPUT_LOG_PRIORITY_ERROR:
+		type = X_ERROR;
+		verbosity = -1;
+		break;
+	case LIBINPUT_LOG_PRIORITY_INFO:
+		type = X_INFO;
+		verbosity = 3;
+		break;
+	default:
+		return;
+	}
+
+	/* log messages in libinput are per-context, not per device, so we
+	   can't use xf86IDrvMsg here, and the server has no xf86VMsg or
+	   similar */
+	LogVMessageVerb(type, verbosity, format, args);
+}
+
 static int xf86libinput_pre_init(InputDriverPtr drv,
 				 InputInfoPtr pInfo,
 				 int flags)
@@ -663,10 +702,16 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	if (!path)
 		goto fail;
 
-	if (!driver_context.libinput)
+	if (!driver_context.libinput) {
 		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
-	else
+		libinput_log_set_handler(driver_context.libinput,
+					 xf86libinput_log_handler);
+		/* we want all msgs, let the server filter */
+		libinput_log_set_priority(driver_context.libinput,
+					  LIBINPUT_LOG_PRIORITY_DEBUG);
+	} else {
 		libinput_ref(driver_context.libinput);
+	}
 
 	libinput = driver_context.libinput;
 
