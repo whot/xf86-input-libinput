@@ -267,7 +267,6 @@ xf86libinput_ptr_ctl(DeviceIntPtr dev, PtrCtrl *ctl)
 {
 }
 
-
 static void
 init_button_map(unsigned char *btnmap, size_t size)
 {
@@ -330,7 +329,6 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
-
 
 	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
 				nbuttons,
@@ -652,7 +650,6 @@ xf86libinput_handle_event(struct libinput_event *event)
 			break;
 	}
 }
-
 
 static void
 xf86libinput_read_input(InputInfoPtr pInfo)
@@ -1042,8 +1039,6 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 	.setup		= &xf86libinput_setup_proc,
 	.teardown	= NULL
 };
-
-
 
 /* Property support */
 
@@ -1526,7 +1521,6 @@ LibinputInitProperty(DeviceIntPtr dev)
 		return;
 
 	XISetDevicePropertyDeletable(dev, prop_device, FALSE);
-
 
 	prop_product_id = MakeAtom(XI_PROP_PRODUCT_ID,
 				   strlen(XI_PROP_PRODUCT_ID),
