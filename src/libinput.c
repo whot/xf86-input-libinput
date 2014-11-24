@@ -610,7 +610,7 @@ xf86libinput_handle_event(struct libinput_event *event)
 	device = libinput_event_get_device(event);
 	pInfo = libinput_device_get_user_data(device);
 
-	if (pInfo && !pInfo->dev->public.on)
+	if (!pInfo || !pInfo->dev->public.on)
 		return;
 
 	switch (libinput_event_get_type(event)) {
