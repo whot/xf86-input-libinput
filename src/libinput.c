@@ -1050,8 +1050,12 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 #define PROP_ACCEL "libinput Accel Speed"
 /* Natural scrolling: BOOL, 1 value */
 #define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
-/* Send-events mode: 32-bit int, 1 value */
-#define PROP_SENDEVENTS "libinput Send Events Mode"
+/* Send-events mode: BOOL read-only, 2 values in order disabled,
+   disabled-on-external-mouse */
+#define PROP_SENDEVENTS_AVAILABLE "libinput Send Events Modes Available"
+/* Send-events mode: BOOL, 2 values in order disabled,
+   disabled-on-external-mouse */
+#define PROP_SENDEVENTS_ENABLED "libinput Send Events Mode Enabled"
 /* Left-handed enabled/disabled: BOOL, 1 value */
 #define PROP_LEFT_HANDED "libinput Left Handed Enabled"
 /* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
@@ -1068,7 +1072,8 @@ static Atom prop_tap;
 static Atom prop_calibration;
 static Atom prop_accel;
 static Atom prop_natural_scroll;
-static Atom prop_sendevents;
+static Atom prop_sendevents_available;
+static Atom prop_sendevents_enabled;
 static Atom prop_left_handed;
 static Atom prop_scroll_methods_available;
 static Atom prop_scroll_method_enabled;
@@ -1207,25 +1212,28 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
 	struct libinput_device *device = driver_data->device;
-	CARD32* data;
+	BOOL* data;
+	uint32_t modes = 0;
 
-	if (val->format != 32 || val->size != 1 || val->type != XA_CARDINAL)
+	if (val->format != 8 || val->size != 2 || val->type != XA_INTEGER)
 		return BadMatch;
 
-	data = (CARD32*)val->data;
+	data = (BOOL*)val->data;
+
+	if (data[0])
+		modes |= LIBINPUT_CONFIG_SEND_EVENTS_DISABLED;
+	if (data[1])
+		modes |= LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE;
 
 	if (checkonly) {
-		uint32_t supported = libinput_device_config_send_events_get_modes(device);
-		uint32_t new_mode = *data;
+		uint32_t supported =
+			libinput_device_config_send_events_get_modes(device);
 
-		if ((new_mode | supported) != supported)
+		if ((modes | supported) != supported)
 			return BadValue;
 
-		/* Only one bit must be set */
-		if (new_mode && ((new_mode & (new_mode - 1)) != 0))
-			return BadValue;
 	} else {
-		driver_data->options.sendevents = *data;
+		driver_data->options.sendevents = modes;
 	}
 
 	return Success;
@@ -1344,7 +1352,9 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyAccel(dev, atom, val, checkonly);
 	else if (atom == prop_natural_scroll)
 		rc = LibinputSetPropertyNaturalScroll(dev, atom, val, checkonly);
-	else if (atom == prop_sendevents)
+	else if (atom == prop_sendevents_available)
+		return BadAccess; /* read-only */
+	else if (atom == prop_sendevents_enabled)
 		rc = LibinputSetPropertySendEvents(dev, atom, val, checkonly);
 	else if (atom == prop_left_handed)
 		rc = LibinputSetPropertyLeftHanded(dev, atom, val, checkonly);
@@ -1374,6 +1384,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	const char *device_node;
 	CARD32 product[2];
 	uint32_t scroll_methods;
+	uint32_t sendevent_modes;
 	int rc;
 
 	prop_float = XIGetKnownProperty("FLOAT");
@@ -1434,19 +1445,47 @@ LibinputInitProperty(DeviceIntPtr dev)
 		XISetDevicePropertyDeletable(dev, prop_natural_scroll, FALSE);
 	}
 
-	if (libinput_device_config_send_events_get_modes(device) !=
-		    LIBINPUT_CONFIG_SEND_EVENTS_ENABLED) {
-		uint32_t sendevents = driver_data->options.sendevents;
+	sendevent_modes = libinput_device_config_send_events_get_modes(device);
+	if (sendevent_modes != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED) {
+		uint32_t sendevents;
+		BOOL modes[2] = {FALSE};
 
-		prop_sendevents = MakeAtom(PROP_SENDEVENTS,
-					   strlen(PROP_SENDEVENTS),
-					   TRUE);
-		rc = XIChangeDeviceProperty(dev, prop_sendevents,
-					    XA_CARDINAL, 32,
-					    PropModeReplace, 1, &sendevents, FALSE);
+		if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED)
+			modes[0] = TRUE;
+		if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE)
+			modes[1] = TRUE;
+
+		prop_sendevents_available = MakeAtom(PROP_SENDEVENTS_AVAILABLE,
+						     strlen(PROP_SENDEVENTS_AVAILABLE),
+						     TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_sendevents_available,
+					    XA_INTEGER, 8,
+					    PropModeReplace, 2, modes, FALSE);
 		if (rc != Success)
 			return;
-		XISetDevicePropertyDeletable(dev, prop_sendevents, FALSE);
+		XISetDevicePropertyDeletable(dev, prop_sendevents_available, FALSE);
+
+		memset(modes, 0, sizeof(modes));
+		sendevents = driver_data->options.sendevents;
+
+		switch(sendevents) {
+		case LIBINPUT_CONFIG_SEND_EVENTS_DISABLED:
+			modes[0] = TRUE;
+			break;
+		case LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE:
+			modes[1] = TRUE;
+			break;
+		}
+
+		prop_sendevents_enabled = MakeAtom(PROP_SENDEVENTS_ENABLED,
+						   strlen(PROP_SENDEVENTS_ENABLED),
+						   TRUE);
+		rc = XIChangeDeviceProperty(dev, prop_sendevents_enabled,
+					    XA_INTEGER, 8,
+					    PropModeReplace, 2, modes, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev, prop_sendevents_enabled, FALSE);
 
 	}
 
