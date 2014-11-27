@@ -1054,9 +1054,12 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 #define PROP_SENDEVENTS "libinput Send Events Mode"
 /* Left-handed enabled/disabled: BOOL, 1 value */
 #define PROP_LEFT_HANDED "libinput Left Handed Enabled"
+/* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
+   shows available scroll methods */
+#define PROP_SCROLL_METHODS_AVAILABLE "libinput Scroll Methods Available"
 /* Scroll method: BOOL, 3 values in order 2fg, edge, button
    only one is enabled at a time at max */
-#define PROP_SCROLL_METHODS "libinput Scroll Methods"
+#define PROP_SCROLL_METHOD_ENABLED "libinput Scroll Method Enabled"
 /* Scroll button for button scrolling: 32-bit int, 1 value */
 #define PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
 
@@ -1067,7 +1070,8 @@ static Atom prop_accel;
 static Atom prop_natural_scroll;
 static Atom prop_sendevents;
 static Atom prop_left_handed;
-static Atom prop_scroll_methods;
+static Atom prop_scroll_methods_available;
+static Atom prop_scroll_method_enabled;
 static Atom prop_scroll_button;
 
 /* general properties */
@@ -1344,7 +1348,9 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertySendEvents(dev, atom, val, checkonly);
 	else if (atom == prop_left_handed)
 		rc = LibinputSetPropertyLeftHanded(dev, atom, val, checkonly);
-	else if (atom == prop_scroll_methods)
+	else if (atom == prop_scroll_methods_available)
+		return BadAccess; /* read-only */
+	else if (atom == prop_scroll_method_enabled)
 		rc = LibinputSetPropertyScrollMethods(dev, atom, val, checkonly);
 	else if (atom == prop_scroll_button)
 		rc = LibinputSetPropertyScrollButton(dev, atom, val, checkonly);
@@ -1463,6 +1469,31 @@ LibinputInitProperty(DeviceIntPtr dev)
 		enum libinput_config_scroll_method method;
 		BOOL methods[3] = {FALSE};
 
+		if (scroll_methods & LIBINPUT_CONFIG_SCROLL_2FG)
+			methods[0] = TRUE;
+		if (scroll_methods & LIBINPUT_CONFIG_SCROLL_EDGE)
+			methods[1] = TRUE;
+		if (scroll_methods & LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN)
+			methods[2] = TRUE;
+
+		prop_scroll_methods_available =
+			MakeAtom(PROP_SCROLL_METHODS_AVAILABLE,
+				 strlen(PROP_SCROLL_METHODS_AVAILABLE),
+				 TRUE);
+		rc = XIChangeDeviceProperty(dev,
+					    prop_scroll_methods_available,
+					    XA_INTEGER, 8,
+					    PropModeReplace,
+					    ARRAY_SIZE(methods),
+					    &methods, FALSE);
+		if (rc != Success)
+			return;
+		XISetDevicePropertyDeletable(dev,
+					     prop_scroll_methods_available,
+					     FALSE);
+
+		memset(methods, 0, sizeof(methods));
+
 		method = libinput_device_config_scroll_get_method(device);
 		switch(method) {
 		case LIBINPUT_CONFIG_SCROLL_2FG:
@@ -1478,18 +1509,22 @@ LibinputInitProperty(DeviceIntPtr dev)
 			break;
 		}
 
-		prop_scroll_methods = MakeAtom(PROP_SCROLL_METHODS,
-					       strlen(PROP_SCROLL_METHODS),
-					       TRUE);
+		prop_scroll_method_enabled =
+			MakeAtom(PROP_SCROLL_METHOD_ENABLED,
+				 strlen(PROP_SCROLL_METHOD_ENABLED),
+				 TRUE);
 		rc = XIChangeDeviceProperty(dev,
-					    prop_scroll_methods,
+					    prop_scroll_method_enabled,
 					    XA_INTEGER, 8,
 					    PropModeReplace,
 					    ARRAY_SIZE(methods),
 					    &methods, FALSE);
 		if (rc != Success)
 			return;
-		XISetDevicePropertyDeletable(dev, prop_scroll_methods, FALSE);
+
+		XISetDevicePropertyDeletable(dev,
+					     prop_scroll_method_enabled,
+					     FALSE);
 	}
 
 	if (libinput_device_config_scroll_get_methods(device) &
