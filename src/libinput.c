@@ -1298,7 +1298,7 @@ LibinputSetPropertyScrollMethods(DeviceIntPtr dev,
 		if (__builtin_popcount(modes) > 1)
 			return BadValue;
 
-		if ((modes & supported) == 0)
+		if (modes && (modes & supported) == 0)
 			return BadValue;
 	} else {
 		driver_data->options.scroll_method = modes;
