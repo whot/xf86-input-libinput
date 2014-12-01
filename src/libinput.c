@@ -677,7 +677,9 @@ xf86libinput_read_input(InputInfoPtr pInfo)
 		return;
 
 	if (rc < 0) {
-		ErrorFSigSafe("Error reading events: %d\n", -rc);
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Error reading events: %s\n",
+			    strerror(-rc));
 		return;
 	}
 
