@@ -142,6 +142,7 @@ LibinputApplyConfig(DeviceIntPtr dev)
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
 	struct libinput_device *device = driver_data->device;
+	unsigned int scroll_button;
 
 	if (libinput_device_config_send_events_get_modes(device) != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED &&
 	    libinput_device_config_send_events_set_mode(device,
@@ -206,8 +207,8 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    method);
 	}
 
-	if (libinput_device_config_scroll_set_button(device,
-						     btn_xorg2linux(driver_data->options.scroll_button)) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+	scroll_button = btn_xorg2linux(driver_data->options.scroll_button);
+	if (libinput_device_config_scroll_set_button(device, scroll_button) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set ScrollButton to %d\n",
 			    driver_data->options.scroll_button);
