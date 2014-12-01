@@ -582,8 +582,8 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 
 	/* libinput doesn't give us hw touch ids which X expects, so
 	   emulate them here */
-	static int next_touchid;
-	static int touchids[TOUCH_MAX_SLOTS] = {0};
+	static unsigned int next_touchid;
+	static unsigned int touchids[TOUCH_MAX_SLOTS] = {0};
 
 	slot = libinput_event_touch_get_slot(event);
 
