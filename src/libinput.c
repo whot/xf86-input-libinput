@@ -746,76 +746,12 @@ xf86libinput_log_handler(struct libinput *libinput,
 	LogVMessageVerb(type, verbosity, format, args);
 }
 
-static int xf86libinput_pre_init(InputDriverPtr drv,
-				 InputInfoPtr pInfo,
-				 int flags)
+static void
+xf86libinput_parse_options(InputInfoPtr pInfo,
+			   struct xf86libinput *driver_data,
+			   struct libinput_device *device)
 {
-	struct xf86libinput *driver_data = NULL;
-        struct libinput *libinput = NULL;
-	struct libinput_device *device;
-	char *path;
 	uint32_t scroll_methods;
-
-	pInfo->fd = -1;
-	pInfo->type_name = 0;
-	pInfo->device_control = xf86libinput_device_control;
-	pInfo->read_input = xf86libinput_read_input;
-	pInfo->control_proc = NULL;
-	pInfo->switch_mode = NULL;
-
-	driver_data = calloc(1, sizeof(*driver_data));
-	if (!driver_data)
-		goto fail;
-
-	driver_data->valuators = valuator_mask_new(2);
-	if (!driver_data->valuators)
-		goto fail;
-
-	driver_data->scroll_vdist = 1;
-	driver_data->scroll_hdist = 1;
-
-	path = xf86SetStrOption(pInfo->options, "Device", NULL);
-	if (!path)
-		goto fail;
-
-	if (!driver_context.libinput) {
-		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
-		libinput_log_set_handler(driver_context.libinput,
-					 xf86libinput_log_handler);
-		/* we want all msgs, let the server filter */
-		libinput_log_set_priority(driver_context.libinput,
-					  LIBINPUT_LOG_PRIORITY_DEBUG);
-	} else {
-		libinput_ref(driver_context.libinput);
-	}
-
-	libinput = driver_context.libinput;
-
-	if (libinput == NULL) {
-		xf86IDrvMsg(pInfo, X_ERROR, "Creating a device for %s failed\n", path);
-		goto fail;
-	}
-
-	device = libinput_path_add_device(libinput, path);
-	if (!device) {
-		xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
-		goto fail;
-	}
-
-	/* We ref the device but remove it afterwards. The hope is that
-	   between now and DEVICE_INIT/DEVICE_ON, the device doesn't change.
-	  */
-	libinput_device_ref(device);
-	libinput_path_remove_device(device);
-
-	pInfo->fd = -1;
-	pInfo->private = driver_data;
-	driver_data->path = path;
-	driver_data->device = device;
-
-	/* Disable acceleration in the server, libinput does it for us */
-	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
-	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0) {
 		BOOL tap = xf86SetBoolOption(pInfo->options,
@@ -985,6 +921,80 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		}
 		driver_data->options.scroll_button = scroll_button;
 	}
+
+}
+
+static int xf86libinput_pre_init(InputDriverPtr drv,
+				 InputInfoPtr pInfo,
+				 int flags)
+{
+	struct xf86libinput *driver_data = NULL;
+        struct libinput *libinput = NULL;
+	struct libinput_device *device;
+	char *path;
+
+	pInfo->fd = -1;
+	pInfo->type_name = 0;
+	pInfo->device_control = xf86libinput_device_control;
+	pInfo->read_input = xf86libinput_read_input;
+	pInfo->control_proc = NULL;
+	pInfo->switch_mode = NULL;
+
+	driver_data = calloc(1, sizeof(*driver_data));
+	if (!driver_data)
+		goto fail;
+
+	driver_data->valuators = valuator_mask_new(2);
+	if (!driver_data->valuators)
+		goto fail;
+
+	driver_data->scroll_vdist = 1;
+	driver_data->scroll_hdist = 1;
+
+	path = xf86SetStrOption(pInfo->options, "Device", NULL);
+	if (!path)
+		goto fail;
+
+	if (!driver_context.libinput) {
+		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
+		libinput_log_set_handler(driver_context.libinput,
+					 xf86libinput_log_handler);
+		/* we want all msgs, let the server filter */
+		libinput_log_set_priority(driver_context.libinput,
+					  LIBINPUT_LOG_PRIORITY_DEBUG);
+	} else {
+		libinput_ref(driver_context.libinput);
+	}
+
+	libinput = driver_context.libinput;
+
+	if (libinput == NULL) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Creating a device for %s failed\n", path);
+		goto fail;
+	}
+
+	device = libinput_path_add_device(libinput, path);
+	if (!device) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
+		goto fail;
+	}
+
+	/* We ref the device but remove it afterwards. The hope is that
+	   between now and DEVICE_INIT/DEVICE_ON, the device doesn't change.
+	  */
+	libinput_device_ref(device);
+	libinput_path_remove_device(device);
+
+	pInfo->fd = -1;
+	pInfo->private = driver_data;
+	driver_data->path = path;
+	driver_data->device = device;
+
+	/* Disable acceleration in the server, libinput does it for us */
+	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
+	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
+
+	xf86libinput_parse_options(pInfo, driver_data, device);
 
 	/* now pick an actual type */
 	if (libinput_device_config_tap_get_finger_count(device) > 0)
