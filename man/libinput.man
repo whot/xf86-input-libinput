@@ -48,7 +48,7 @@ The mapping from device node to hardware is system-dependent. Property:
 .BI "Option \*qAccelSpeed\*q \*q" float \*q
 Sets the pointer acceleration speed within the range [-1, 1]
 .TP 7
-.BI "Option \*qCalibration\*q \*q" string \*q
+.BI "Option \*qCalibrationMatrix\*q \*q" string \*q
 A string of 9 space-separated floating point numbers.
 Sets the calibration matrix to the 3x3 matrix where the first row is (abc),
 the second row is (def) and the third row is (ghi).
