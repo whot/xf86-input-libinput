@@ -387,16 +387,30 @@ xf86libinput_init_keyboard(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev= pInfo->dev;
 	XkbRMLVOSet rmlvo = {0};
+	XkbRMLVOSet defaults = {0};
 
-	rmlvo.rules = xf86SetStrOption(pInfo->options, "xkb_rules", "evdev");
-	rmlvo.model = xf86SetStrOption(pInfo->options, "xkb_model", "pc104");
-	rmlvo.layout = xf86SetStrOption(pInfo->options, "xkb_layout", "us");
-	rmlvo.variant = xf86SetStrOption(pInfo->options, "xkb_variant", NULL);
-	rmlvo.options = xf86SetStrOption(pInfo->options, "xkb_options", NULL);
+	XkbGetRulesDflts(&defaults);
+
+	rmlvo.rules = xf86SetStrOption(pInfo->options,
+				       "xkb_rules",
+				       defaults.rules);
+	rmlvo.model = xf86SetStrOption(pInfo->options,
+				       "xkb_model",
+				       defaults.model);
+	rmlvo.layout = xf86SetStrOption(pInfo->options,
+					"xkb_layout",
+					defaults.layout);
+	rmlvo.variant = xf86SetStrOption(pInfo->options,
+					 "xkb_variant",
+					 defaults.variant);
+	rmlvo.options = xf86SetStrOption(pInfo->options,
+					 "xkb_options",
+					 defaults.options);
 
 	InitKeyboardDeviceStruct(dev, &rmlvo, NULL,
 				 xf86libinput_kbd_ctrl);
 	XkbFreeRMLVOSet(&rmlvo, FALSE);
+	XkbFreeRMLVOSet(&defaults, FALSE);
 }
 
 static void
