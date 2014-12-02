@@ -31,6 +31,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <xorg-server.h>
+#include <list.h>
 #include <exevents.h>
 #include <xkbsrv.h>
 #include <xf86Xinput.h>
@@ -39,6 +40,10 @@
 #include <linux/input.h>
 
 #include <X11/Xatom.h>
+
+#ifndef XI86_SERVER_FD
+#define XI86_SERVER_FD 0x20
+#endif
 
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TOUCH_MAX_SLOTS 15
@@ -61,6 +66,7 @@
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_enabled_count;
+	struct xorg_list server_fds;
 };
 
 static struct xf86libinput_driver driver_context;
@@ -94,6 +100,80 @@ struct xf86libinput {
 		enum libinput_config_scroll_method scroll_method;
 	} options;
 };
+
+/*
+   libinput provides a userdata for the context, but not per path device. so
+   the open_restricted call has the libinput context, but no reference to
+   the pInfo->fd that we actually need to return.
+   To avoid this, we store each path/fd combination during pre_init in the
+   context, then return that during open_restricted. If a device is added
+   twice with two different fds this may give us the wrong fd but why are
+   you doing that anyway.
+ */
+struct serverfd {
+	struct xorg_list node;
+	int fd;
+	char *path;
+};
+
+static inline int
+use_server_fd(const InputInfoPtr pInfo) {
+	return pInfo->fd > -1 && (pInfo->flags & XI86_SERVER_FD);
+}
+
+static inline void
+fd_push(struct xf86libinput_driver *context,
+	int fd,
+	const char *path)
+{
+	struct serverfd *sfd = xnfcalloc(1, sizeof(*sfd));
+
+	sfd->fd = fd;
+	sfd->path = xnfstrdup(path);
+	xorg_list_add(&sfd->node, &context->server_fds);
+}
+
+static inline int
+fd_get(struct xf86libinput_driver *context,
+       const char *path)
+{
+	struct serverfd *sfd;
+
+	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
+		if (strcmp(path, sfd->path) == 0)
+			return sfd->fd;
+	}
+
+	return -1;
+}
+
+static inline void
+fd_pop(struct xf86libinput_driver *context, int fd)
+{
+	struct serverfd *sfd;
+
+	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
+		if (fd != sfd->fd)
+			continue;
+
+		xorg_list_del(&sfd->node);
+		free(sfd->path);
+		free(sfd);
+		break;
+	}
+}
+
+static inline int
+fd_find(struct xf86libinput_driver *context, int fd)
+{
+	struct serverfd *sfd;
+
+	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
+		if (fd == sfd->fd)
+			return fd;
+	}
+	return -1;
+}
 
 static inline unsigned int
 btn_linux2xorg(unsigned int b)
@@ -222,13 +302,24 @@ xf86libinput_on(DeviceIntPtr dev)
 	struct libinput *libinput = driver_context.libinput;
 	struct libinput_device *device = driver_data->device;
 
+	if (use_server_fd(pInfo)) {
+		char *path = xf86SetStrOption(pInfo->options, "Device", NULL);
+		fd_push(&driver_context, pInfo->fd, path);
+		free(path);
+	}
+
 	device = libinput_path_add_device(libinput, driver_data->path);
 	if (!device)
 		return !Success;
+
 	libinput_device_ref(device);
 	libinput_device_set_user_data(device, pInfo);
 	driver_data->device = device;
 
+	/* if we use server fds, overwrite the fd with the one from
+	   libinput nonetheless, otherwise the server won't call ReadInput
+	   for our device. This must be swapped back to the real fd in
+	   DEVICE_OFF so systemd-logind closes the right fd */
 	pInfo->fd = libinput_get_fd(libinput);
 
 	if (driver_context.device_enabled_count == 0) {
@@ -252,7 +343,13 @@ xf86libinput_off(DeviceIntPtr dev)
 		RemoveEnabledDevice(pInfo->fd);
 	}
 
-	pInfo->fd = -1;
+	if (use_server_fd(pInfo)) {
+		fd_pop(&driver_context, pInfo->fd);
+		pInfo->fd = xf86SetIntOption(pInfo->options, "fd", -1);
+	} else {
+		pInfo->fd = -1;
+	}
+
 	dev->public.on = FALSE;
 
 	libinput_device_set_user_data(driver_data->device, NULL);
@@ -763,14 +860,22 @@ xf86libinput_read_input(InputInfoPtr pInfo)
 static int
 open_restricted(const char *path, int flags, void *data)
 {
-	int fd = open(path, flags);
+	struct xf86libinput_driver *context = data;
+	int fd;
+
+	fd = fd_get(context, path);
+	if (fd == -1)
+		fd = open(path, flags);
 	return fd < 0 ? -errno : fd;
 }
 
 static void
 close_restricted(int fd, void *data)
 {
-	close(fd);
+	struct xf86libinput_driver *context = data;
+
+	if (fd_find(context, fd) == -1)
+		close(fd);
 }
 
 const struct libinput_interface interface = {
@@ -1004,7 +1109,6 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	struct libinput_device *device;
 	char *path;
 
-	pInfo->fd = -1;
 	pInfo->type_name = 0;
 	pInfo->device_control = xf86libinput_device_control;
 	pInfo->read_input = xf86libinput_read_input;
@@ -1033,6 +1137,7 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		/* we want all msgs, let the server filter */
 		libinput_log_set_priority(driver_context.libinput,
 					  LIBINPUT_LOG_PRIORITY_DEBUG);
+		xorg_list_init(&driver_context.server_fds);
 	} else {
 		libinput_ref(driver_context.libinput);
 	}
@@ -1043,6 +1148,9 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 		xf86IDrvMsg(pInfo, X_ERROR, "Creating a device for %s failed\n", path);
 		goto fail;
 	}
+
+	if (use_server_fd(pInfo))
+		fd_push(&driver_context, pInfo->fd, path);
 
 	device = libinput_path_add_device(libinput, path);
 	if (!device) {
@@ -1055,8 +1163,9 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 	  */
 	libinput_device_ref(device);
 	libinput_path_remove_device(device);
+	if (use_server_fd(pInfo))
+	    fd_pop(&driver_context, pInfo->fd);
 
-	pInfo->fd = -1;
 	pInfo->private = driver_data;
 	driver_data->path = path;
 	driver_data->device = device;
@@ -1081,6 +1190,8 @@ static int xf86libinput_pre_init(InputDriverPtr drv,
 
 	return Success;
 fail:
+	if (use_server_fd(pInfo) && driver_context.libinput != NULL)
+		fd_pop(&driver_context, pInfo->fd);
 	if (driver_data->valuators)
 		valuator_mask_free(&driver_data->valuators);
 	free(path);
@@ -1109,6 +1220,11 @@ InputDriverRec xf86libinput_driver = {
 	.driverName	= "libinput",
 	.PreInit	= xf86libinput_pre_init,
 	.UnInit		= xf86libinput_uninit,
+	.module		= NULL,
+	.default_options= NULL,
+#ifdef XI86_DRV_CAP_SERVER_FD
+	.capabilities	= XI86_DRV_CAP_SERVER_FD
+#endif
 };
 
 static XF86ModuleVersionInfo xf86libinput_version_info = {
