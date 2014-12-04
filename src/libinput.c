@@ -355,6 +355,53 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	return Success;
 }
 
+static int
+xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
+{
+	DeviceIntPtr dev= pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	int min, max, res;
+	int nbuttons = 7;
+	int i;
+
+	unsigned char btnmap[MAX_BUTTONS + 1];
+	Atom btnlabels[MAX_BUTTONS];
+	Atom axislabels[TOUCHPAD_NUM_AXES];
+
+	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
+		if (libinput_device_has_button(driver_data->device, i)) {
+			nbuttons += i - BTN_SIDE + 1;
+			break;
+		}
+	}
+
+	init_button_map(btnmap, ARRAY_SIZE(btnmap));
+	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
+	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
+
+	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
+				nbuttons,
+				btnlabels,
+				xf86libinput_ptr_ctl,
+				GetMotionHistorySize(),
+				TOUCHPAD_NUM_AXES,
+				axislabels);
+	min = 0;
+	max = TOUCH_AXIS_MAX;
+	res = 0;
+
+	xf86InitValuatorAxisStruct(dev, 0,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_X),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	xf86InitValuatorAxisStruct(dev, 1,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+
+	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll_hdist, 0);
+	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll_vdist, 0);
+
+	return Success;
+}
 static void
 xf86libinput_kbd_ctrl(DeviceIntPtr device, KeybdCtrl *ctrl)
 {
@@ -460,8 +507,12 @@ xf86libinput_init(DeviceIntPtr dev)
 
 	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
 		xf86libinput_init_keyboard(pInfo);
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
-		xf86libinput_init_pointer(pInfo);
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER)) {
+		if (libinput_device_config_calibration_has_matrix(device))
+			xf86libinput_init_pointer_absolute(pInfo);
+		else
+			xf86libinput_init_pointer(pInfo);
+	}
 	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
 		xf86libinput_init_touch(pInfo);
 
@@ -519,6 +570,24 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	valuator_mask_set_double(mask, 1, y);
 
 	xf86PostMotionEventM(dev, Relative, mask);
+}
+
+static void
+xf86libinput_handle_absmotion(InputInfoPtr pInfo, struct libinput_event_pointer *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	ValuatorMask *mask = driver_data->valuators;
+	double x, y;
+
+	x = libinput_event_pointer_get_absolute_x_transformed(event, TOUCH_AXIS_MAX);
+	y = libinput_event_pointer_get_absolute_y_transformed(event, TOUCH_AXIS_MAX);
+
+	valuator_mask_zero(mask);
+	valuator_mask_set_double(mask, 0, x);
+	valuator_mask_set_double(mask, 1, y);
+
+	xf86PostMotionEventM(dev, Absolute, mask);
 }
 
 static void
@@ -634,7 +703,8 @@ xf86libinput_handle_event(struct libinput_event *event)
 		case LIBINPUT_EVENT_DEVICE_REMOVED:
 			break;
 		case LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE:
-			/* FIXME */
+			xf86libinput_handle_absmotion(pInfo,
+						      libinput_event_get_pointer_event(event));
 			break;
 
 		case LIBINPUT_EVENT_POINTER_MOTION:
