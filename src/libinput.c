@@ -59,9 +59,9 @@
 
 /*
    libinput scales wheel events by DEFAULT_AXIS_STEP_DISTANCE, which is
-   currently 10.
+   currently 15.
  */
-#define DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE 10
+#define DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE 15
 
 struct xf86libinput_driver {
 	struct libinput *libinput;
@@ -263,8 +263,8 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    driver_data->options.matrix[6], driver_data->options.matrix[7],
 			    driver_data->options.matrix[8]);
 
-	if (libinput_device_config_buttons_set_left_handed(device,
-							   driver_data->options.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+	if (libinput_device_config_left_handed_set(device,
+						   driver_data->options.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set LeftHanded to %d\n",
 			    driver_data->options.left_handed);
@@ -718,19 +718,38 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	DeviceIntPtr dev = pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
-	int axis;
 	double value;
-
-	if (libinput_event_pointer_get_axis(event) ==
-			LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL)
-		axis = 3;
-	else
-		axis = 2;
-
-	value = libinput_event_pointer_get_axis_value(event) / DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE;
+	enum libinput_pointer_axis axis;
+	enum libinput_pointer_axis_source source;
 
 	valuator_mask_zero(mask);
-	valuator_mask_set_double(mask, axis, value);
+
+	source = libinput_event_pointer_get_axis_source(event);
+	switch(source) {
+		case LIBINPUT_POINTER_AXIS_SOURCE_FINGER:
+		case LIBINPUT_POINTER_AXIS_SOURCE_WHEEL:
+		case LIBINPUT_POINTER_AXIS_SOURCE_CONTINUOUS:
+			break;
+		default:
+			return;
+	}
+
+	axis = LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL;
+	if (libinput_event_pointer_has_axis(event, axis)) {
+		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL)
+			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
+		else
+			value = libinput_event_pointer_get_axis_value(event, axis);
+		valuator_mask_set_double(mask, 3, value);
+	}
+	axis = LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL;
+	if (libinput_event_pointer_has_axis(event, axis)) {
+		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL)
+			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
+		else
+			value = libinput_event_pointer_get_axis_value(event, axis);
+		valuator_mask_set_double(mask, 2, value);
+	}
 
 	xf86PostMotionEventM(dev, Relative, mask);
 }
@@ -1036,17 +1055,17 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		}
 	}
 
-	if (libinput_device_config_buttons_has_left_handed(device)) {
+	if (libinput_device_config_left_handed_is_available(device)) {
 		BOOL left_handed = xf86SetBoolOption(pInfo->options,
 						     "LeftHanded",
-						     libinput_device_config_buttons_get_left_handed(device));
-		if (libinput_device_config_buttons_set_left_handed(device,
-								   left_handed) !=
+						     libinput_device_config_left_handed_get(device));
+		if (libinput_device_config_left_handed_set(device,
+							   left_handed) !=
 		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Failed to set LeftHanded to %d\n",
 				    left_handed);
-			left_handed = libinput_device_config_buttons_get_left_handed(device);
+			left_handed = libinput_device_config_left_handed_get(device);
 		}
 		driver_data->options.left_handed = left_handed;
 	}
@@ -1469,7 +1488,7 @@ LibinputSetPropertyLeftHanded(DeviceIntPtr dev,
 	data = (BOOL*)val->data;
 
 	if (checkonly) {
-		int supported = libinput_device_config_buttons_has_left_handed(device);
+		int supported = libinput_device_config_left_handed_is_available(device);
 		int left_handed = *data;
 
 		if (!supported && left_handed)
@@ -1702,7 +1721,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 
 	}
 
-	if (libinput_device_config_buttons_has_left_handed(device)) {
+	if (libinput_device_config_left_handed_is_available(device)) {
 		BOOL left_handed = driver_data->options.left_handed;
 
 		prop_left_handed = MakeAtom(PROP_LEFT_HANDED,
