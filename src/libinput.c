@@ -57,12 +57,6 @@
  */
 #define TOUCH_AXIS_MAX 0xffff
 
-/*
-   libinput scales wheel events by DEFAULT_AXIS_STEP_DISTANCE, which is
-   currently 15.
- */
-#define DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE 15
-
 /* Tapping enabled/disabled: BOOL, 1 value */
 #define PROP_TAP "libinput Tapping Enabled"
 /* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
