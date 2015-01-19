@@ -63,6 +63,31 @@
  */
 #define DEFAULT_LIBINPUT_AXIS_STEP_DISTANCE 15
 
+/* Tapping enabled/disabled: BOOL, 1 value */
+#define PROP_TAP "libinput Tapping Enabled"
+/* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
+#define PROP_CALIBRATION "libinput Calibration Matrix"
+/* Pointer accel speed: FLOAT, 1 value, 32 bit */
+#define PROP_ACCEL "libinput Accel Speed"
+/* Natural scrolling: BOOL, 1 value */
+#define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
+/* Send-events mode: BOOL read-only, 2 values in order disabled,
+   disabled-on-external-mouse */
+#define PROP_SENDEVENTS_AVAILABLE "libinput Send Events Modes Available"
+/* Send-events mode: BOOL, 2 values in order disabled,
+   disabled-on-external-mouse */
+#define PROP_SENDEVENTS_ENABLED "libinput Send Events Mode Enabled"
+/* Left-handed enabled/disabled: BOOL, 1 value */
+#define PROP_LEFT_HANDED "libinput Left Handed Enabled"
+/* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
+   shows available scroll methods */
+#define PROP_SCROLL_METHODS_AVAILABLE "libinput Scroll Methods Available"
+/* Scroll method: BOOL, 3 values in order 2fg, edge, button
+   only one is enabled at a time at max */
+#define PROP_SCROLL_METHOD_ENABLED "libinput Scroll Method Enabled"
+/* Scroll button for button scrolling: 32-bit int, 1 value */
+#define PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
+
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_enabled_count;
@@ -1273,31 +1298,6 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 };
 
 /* Property support */
-
-/* Tapping enabled/disabled: BOOL, 1 value */
-#define PROP_TAP "libinput Tapping Enabled"
-/* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
-#define PROP_CALIBRATION "libinput Calibration Matrix"
-/* Pointer accel speed: FLOAT, 1 value, 32 bit */
-#define PROP_ACCEL "libinput Accel Speed"
-/* Natural scrolling: BOOL, 1 value */
-#define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
-/* Send-events mode: BOOL read-only, 2 values in order disabled,
-   disabled-on-external-mouse */
-#define PROP_SENDEVENTS_AVAILABLE "libinput Send Events Modes Available"
-/* Send-events mode: BOOL, 2 values in order disabled,
-   disabled-on-external-mouse */
-#define PROP_SENDEVENTS_ENABLED "libinput Send Events Mode Enabled"
-/* Left-handed enabled/disabled: BOOL, 1 value */
-#define PROP_LEFT_HANDED "libinput Left Handed Enabled"
-/* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
-   shows available scroll methods */
-#define PROP_SCROLL_METHODS_AVAILABLE "libinput Scroll Methods Available"
-/* Scroll method: BOOL, 3 values in order 2fg, edge, button
-   only one is enabled at a time at max */
-#define PROP_SCROLL_METHOD_ENABLED "libinput Scroll Method Enabled"
-/* Scroll button for button scrolling: 32-bit int, 1 value */
-#define PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
 
 /* libinput-specific properties */
 static Atom prop_tap;
