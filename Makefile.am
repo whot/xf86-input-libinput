@@ -21,8 +21,11 @@
 
 DISTCHECK_CONFIGURE_FLAGS = --with-sdkdir='$${includedir}/xorg'
 
-SUBDIRS = src man
+SUBDIRS = src include man
 MAINTAINERCLEANFILES = ChangeLog INSTALL
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = xorg-libinput.pc
 
 .PHONY: ChangeLog INSTALL
 
