@@ -41,6 +41,8 @@
 
 #include <X11/Xatom.h>
 
+#include "libinput-properties.h"
+
 #ifndef XI86_SERVER_FD
 #define XI86_SERVER_FD 0x20
 #endif
@@ -56,31 +58,6 @@
    do the scaling it usually does.
  */
 #define TOUCH_AXIS_MAX 0xffff
-
-/* Tapping enabled/disabled: BOOL, 1 value */
-#define PROP_TAP "libinput Tapping Enabled"
-/* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
-#define PROP_CALIBRATION "libinput Calibration Matrix"
-/* Pointer accel speed: FLOAT, 1 value, 32 bit */
-#define PROP_ACCEL "libinput Accel Speed"
-/* Natural scrolling: BOOL, 1 value */
-#define PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
-/* Send-events mode: BOOL read-only, 2 values in order disabled,
-   disabled-on-external-mouse */
-#define PROP_SENDEVENTS_AVAILABLE "libinput Send Events Modes Available"
-/* Send-events mode: BOOL, 2 values in order disabled,
-   disabled-on-external-mouse */
-#define PROP_SENDEVENTS_ENABLED "libinput Send Events Mode Enabled"
-/* Left-handed enabled/disabled: BOOL, 1 value */
-#define PROP_LEFT_HANDED "libinput Left Handed Enabled"
-/* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
-   shows available scroll methods */
-#define PROP_SCROLL_METHODS_AVAILABLE "libinput Scroll Methods Available"
-/* Scroll method: BOOL, 3 values in order 2fg, edge, button
-   only one is enabled at a time at max */
-#define PROP_SCROLL_METHOD_ENABLED "libinput Scroll Method Enabled"
-/* Scroll button for button scrolling: 32-bit int, 1 value */
-#define PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
 
 struct xf86libinput_driver {
 	struct libinput *libinput;
@@ -1618,7 +1595,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	if (libinput_device_config_tap_get_finger_count(device) > 0) {
 		BOOL tap = driver_data->options.tapping;
 
-		prop_tap = MakeAtom(PROP_TAP, strlen(PROP_TAP), TRUE);
+		prop_tap = MakeAtom(LIBINPUT_PROP_TAP, strlen(LIBINPUT_PROP_TAP), TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_tap, XA_INTEGER, 8,
 					    PropModeReplace, 1, &tap, FALSE);
 		if (rc != Success)
@@ -1636,8 +1613,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 		calibration[7] = 0;
 		calibration[8] = 1;
 
-		prop_calibration = MakeAtom(PROP_CALIBRATION,
-					    strlen(PROP_CALIBRATION),
+		prop_calibration = MakeAtom(LIBINPUT_PROP_CALIBRATION,
+					    strlen(LIBINPUT_PROP_CALIBRATION),
 					    TRUE);
 
 		rc = XIChangeDeviceProperty(dev, prop_calibration, prop_float, 32,
@@ -1650,7 +1627,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	if (libinput_device_config_accel_is_available(device)) {
 		float speed = driver_data->options.speed;
 
-		prop_accel = MakeAtom(PROP_ACCEL, strlen(PROP_ACCEL), TRUE);
+		prop_accel = MakeAtom(LIBINPUT_PROP_ACCEL, strlen(LIBINPUT_PROP_ACCEL), TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_accel, prop_float, 32,
 					    PropModeReplace, 1, &speed, FALSE);
 		if (rc != Success)
@@ -1661,8 +1638,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 	if (libinput_device_config_scroll_has_natural_scroll(device)) {
 		BOOL natural_scroll = driver_data->options.natural_scrolling;
 
-		prop_natural_scroll = MakeAtom(PROP_NATURAL_SCROLL,
-					       strlen(PROP_NATURAL_SCROLL),
+		prop_natural_scroll = MakeAtom(LIBINPUT_PROP_NATURAL_SCROLL,
+					       strlen(LIBINPUT_PROP_NATURAL_SCROLL),
 					       TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_natural_scroll, XA_INTEGER, 8,
 					    PropModeReplace, 1, &natural_scroll, FALSE);
@@ -1681,8 +1658,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 		if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE)
 			modes[1] = TRUE;
 
-		prop_sendevents_available = MakeAtom(PROP_SENDEVENTS_AVAILABLE,
-						     strlen(PROP_SENDEVENTS_AVAILABLE),
+		prop_sendevents_available = MakeAtom(LIBINPUT_PROP_SENDEVENTS_AVAILABLE,
+						     strlen(LIBINPUT_PROP_SENDEVENTS_AVAILABLE),
 						     TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_sendevents_available,
 					    XA_INTEGER, 8,
@@ -1703,8 +1680,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 			break;
 		}
 
-		prop_sendevents_enabled = MakeAtom(PROP_SENDEVENTS_ENABLED,
-						   strlen(PROP_SENDEVENTS_ENABLED),
+		prop_sendevents_enabled = MakeAtom(LIBINPUT_PROP_SENDEVENTS_ENABLED,
+						   strlen(LIBINPUT_PROP_SENDEVENTS_ENABLED),
 						   TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_sendevents_enabled,
 					    XA_INTEGER, 8,
@@ -1718,8 +1695,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 	if (libinput_device_config_left_handed_is_available(device)) {
 		BOOL left_handed = driver_data->options.left_handed;
 
-		prop_left_handed = MakeAtom(PROP_LEFT_HANDED,
-					    strlen(PROP_LEFT_HANDED),
+		prop_left_handed = MakeAtom(LIBINPUT_PROP_LEFT_HANDED,
+					    strlen(LIBINPUT_PROP_LEFT_HANDED),
 					    TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_left_handed,
 					    XA_INTEGER, 8,
@@ -1742,8 +1719,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 			methods[2] = TRUE;
 
 		prop_scroll_methods_available =
-			MakeAtom(PROP_SCROLL_METHODS_AVAILABLE,
-				 strlen(PROP_SCROLL_METHODS_AVAILABLE),
+			MakeAtom(LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE,
+				 strlen(LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE),
 				 TRUE);
 		rc = XIChangeDeviceProperty(dev,
 					    prop_scroll_methods_available,
@@ -1775,8 +1752,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 		}
 
 		prop_scroll_method_enabled =
-			MakeAtom(PROP_SCROLL_METHOD_ENABLED,
-				 strlen(PROP_SCROLL_METHOD_ENABLED),
+			MakeAtom(LIBINPUT_PROP_SCROLL_METHOD_ENABLED,
+				 strlen(LIBINPUT_PROP_SCROLL_METHOD_ENABLED),
 				 TRUE);
 		rc = XIChangeDeviceProperty(dev,
 					    prop_scroll_method_enabled,
@@ -1796,8 +1773,8 @@ LibinputInitProperty(DeviceIntPtr dev)
 	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
 		CARD32 scroll_button = driver_data->options.scroll_button;
 
-		prop_scroll_button = MakeAtom(PROP_SCROLL_BUTTON,
-					    strlen(PROP_SCROLL_BUTTON),
+		prop_scroll_button = MakeAtom(LIBINPUT_PROP_SCROLL_BUTTON,
+					    strlen(LIBINPUT_PROP_SCROLL_BUTTON),
 					    TRUE);
 		rc = XIChangeDeviceProperty(dev, prop_scroll_button,
 					    XA_CARDINAL, 32,
