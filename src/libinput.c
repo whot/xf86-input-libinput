@@ -326,6 +326,8 @@ xf86libinput_on(DeviceIntPtr dev)
 	driver_context.device_enabled_count++;
 	dev->public.on = TRUE;
 
+	LibinputApplyConfig(dev);
+
 	return Success;
 }
 
