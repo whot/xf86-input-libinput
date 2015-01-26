@@ -386,8 +386,8 @@ init_button_labels(Atom *labels, size_t size)
 	labels[6] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_HWHEEL_RIGHT);
 	labels[7] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_SIDE);
 	labels[8] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_EXTRA);
-	labels[9] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_BACK);
-	labels[10] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_FORWARD);
+	labels[9] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_FORWARD);
+	labels[10] = XIGetKnownProperty(BTN_LABEL_PROP_BTN_BACK);
 }
 
 static void
