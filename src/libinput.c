@@ -1115,9 +1115,10 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 
 }
 
-static int xf86libinput_pre_init(InputDriverPtr drv,
-				 InputInfoPtr pInfo,
-				 int flags)
+static int
+xf86libinput_pre_init(InputDriverPtr drv,
+		      InputInfoPtr pInfo,
+		      int flags)
 {
 	struct xf86libinput *driver_data = NULL;
         struct libinput *libinput = NULL;
