@@ -259,7 +259,8 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    driver_data->options.matrix[6], driver_data->options.matrix[7],
 			    driver_data->options.matrix[8]);
 
-	if (libinput_device_config_left_handed_set(device,
+	if (libinput_device_config_left_handed_is_available(device) &&
+	    libinput_device_config_left_handed_set(device,
 						   driver_data->options.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set LeftHanded to %d\n",
@@ -283,11 +284,13 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    method);
 	}
 
-	scroll_button = btn_xorg2linux(driver_data->options.scroll_button);
-	if (libinput_device_config_scroll_set_button(device, scroll_button) != LIBINPUT_CONFIG_STATUS_SUCCESS)
-		xf86IDrvMsg(pInfo, X_ERROR,
-			    "Failed to set ScrollButton to %d\n",
-			    driver_data->options.scroll_button);
+	if (libinput_device_config_scroll_get_methods(device) & LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
+		scroll_button = btn_xorg2linux(driver_data->options.scroll_button);
+		if (libinput_device_config_scroll_set_button(device, scroll_button) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set ScrollButton to %d\n",
+				    driver_data->options.scroll_button);
+	}
 }
 
 static int
