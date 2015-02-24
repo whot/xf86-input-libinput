@@ -372,7 +372,7 @@ init_button_map(unsigned char *btnmap, size_t size)
 	int i;
 
 	memset(btnmap, 0, size);
-	for (i = 0; i <= size; i++)
+	for (i = 0; i < size; i++)
 		btnmap[i] = i;
 }
 
