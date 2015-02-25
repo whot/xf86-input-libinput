@@ -1293,6 +1293,26 @@ static Atom prop_float;
 static Atom prop_device;
 static Atom prop_product_id;
 
+static inline BOOL
+xf86libinput_check_device (DeviceIntPtr dev,
+			   Atom atom)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+
+	if (device == NULL) {
+		BUG_WARN(dev->public.on);
+		xf86IDrvMsg(pInfo, X_INFO,
+			    "SetProperty on %d called but device is disabled.\n"
+			    "This driver cannot change properties on a disabled device\n",
+			    atom);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 static inline int
 LibinputSetPropertyTap(DeviceIntPtr dev,
                        Atom atom,
@@ -1311,6 +1331,9 @@ LibinputSetPropertyTap(DeviceIntPtr dev,
 	if (checkonly) {
 		if (*data != 0 && *data != 1)
 			return BadValue;
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
 
 		if (libinput_device_config_tap_get_finger_count(device) == 0)
 			return BadMatch;
@@ -1343,6 +1366,9 @@ LibinputSetPropertyCalibration(DeviceIntPtr dev,
 		    data[8] != 1)
 			return BadValue;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
 		if (!libinput_device_config_calibration_has_matrix(device))
 			return BadMatch;
 	} else {
@@ -1374,6 +1400,9 @@ LibinputSetPropertyAccel(DeviceIntPtr dev,
 		if (*data < -1 || *data > 1)
 			return BadValue;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
 		if (libinput_device_config_accel_is_available(device) == 0)
 			return BadMatch;
 	} else {
@@ -1402,6 +1431,9 @@ LibinputSetPropertyNaturalScroll(DeviceIntPtr dev,
 	if (checkonly) {
 		if (*data != 0 && *data != 1)
 			return BadValue;
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
 
 		if (libinput_device_config_scroll_has_natural_scroll(device) == 0)
 			return BadMatch;
@@ -1435,9 +1467,12 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 		modes |= LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE;
 
 	if (checkonly) {
-		uint32_t supported =
-			libinput_device_config_send_events_get_modes(device);
+		uint32_t supported;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		supported = libinput_device_config_send_events_get_modes(device);
 		if ((modes | supported) != supported)
 			return BadValue;
 
@@ -1465,9 +1500,13 @@ LibinputSetPropertyLeftHanded(DeviceIntPtr dev,
 	data = (BOOL*)val->data;
 
 	if (checkonly) {
-		int supported = libinput_device_config_left_handed_is_available(device);
+		int supported;
 		int left_handed = *data;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		supported = libinput_device_config_left_handed_is_available(device);
 		if (!supported && left_handed)
 			return BadValue;
 	} else {
@@ -1502,11 +1541,15 @@ LibinputSetPropertyScrollMethods(DeviceIntPtr dev,
 		modes |= LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
 
 	if (checkonly) {
-		uint32_t supported = libinput_device_config_scroll_get_methods(device);
+		uint32_t supported;
 
 		if (__builtin_popcount(modes) > 1)
 			return BadValue;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		supported = libinput_device_config_scroll_get_methods(device);
 		if (modes && (modes & supported) == 0)
 			return BadValue;
 	} else {
@@ -1534,9 +1577,13 @@ LibinputSetPropertyScrollButton(DeviceIntPtr dev,
 
 	if (checkonly) {
 		uint32_t button = *data;
-		uint32_t supported = libinput_device_has_button(device,
-								btn_xorg2linux(button));
+		uint32_t supported;
 
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		supported = libinput_device_has_button(device,
+						       btn_xorg2linux(button));
 		if (button && !supported)
 			return BadValue;
 	} else {
