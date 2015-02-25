@@ -419,7 +419,7 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
 	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
-		if (libinput_device_has_button(driver_data->device, i)) {
+		if (libinput_device_pointer_has_button(driver_data->device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
 			break;
 		}
@@ -467,7 +467,7 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
 	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
-		if (libinput_device_has_button(driver_data->device, i)) {
+		if (libinput_device_pointer_has_button(driver_data->device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
 			break;
 		}
@@ -1582,8 +1582,8 @@ LibinputSetPropertyScrollButton(DeviceIntPtr dev,
 		if (!xf86libinput_check_device (dev, atom))
 			return BadMatch;
 
-		supported = libinput_device_has_button(device,
-						       btn_xorg2linux(button));
+		supported = libinput_device_pointer_has_button(device,
+							       btn_xorg2linux(button));
 		if (button && !supported)
 			return BadValue;
 	} else {
