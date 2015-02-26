@@ -94,6 +94,7 @@ struct xf86libinput {
 		float speed;
 		float matrix[9];
 		enum libinput_config_scroll_method scroll_method;
+		enum libinput_config_click_method click_method;
 	} options;
 };
 
@@ -290,6 +291,23 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Failed to set ScrollButton to %d\n",
 				    driver_data->options.scroll_button);
+	}
+
+	if (libinput_device_config_click_set_method(device,
+						    driver_data->options.click_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		const char *method;
+
+		switch (driver_data->options.click_method) {
+		case LIBINPUT_CONFIG_CLICK_METHOD_NONE: method = "none"; break;
+		case LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS: method = "buttonareas"; break;
+		case LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER: method = "clickfinger"; break;
+		default:
+			method = "unknown"; break;
+		}
+
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set click method to %s\n",
+			    method);
 	}
 }
 
@@ -948,6 +966,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct libinput_device *device)
 {
 	uint32_t scroll_methods;
+	uint32_t click_methods;
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0) {
 		BOOL tap = xf86SetBoolOption(pInfo->options,
@@ -1118,6 +1137,31 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		driver_data->options.scroll_button = scroll_button;
 	}
 
+	click_methods = libinput_device_config_click_get_methods(device);
+	if (click_methods != LIBINPUT_CONFIG_CLICK_METHOD_NONE) {
+		enum libinput_config_click_method m;
+		char *method = xf86SetStrOption(pInfo->options,
+						"ClickMethod",
+						NULL);
+
+		if (!method)
+			m = libinput_device_config_click_get_method(device);
+		else if (strncasecmp(method, "buttonareas", 11) == 0)
+			m = LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+		else if (strncasecmp(method, "clickfinger", 11) == 0)
+			m = LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER;
+		else if (strncasecmp(method, "none", 4) == 0)
+			m = LIBINPUT_CONFIG_CLICK_METHOD_NONE;
+		else {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Unknown click method '%s'. Using default.\n",
+				    method);
+			m = libinput_device_config_click_get_method(device);
+		}
+
+		driver_data->options.click_method = m;
+		free(method);
+	}
 }
 
 static int
@@ -1287,6 +1331,8 @@ static Atom prop_left_handed;
 static Atom prop_scroll_methods_available;
 static Atom prop_scroll_method_enabled;
 static Atom prop_scroll_button;
+static Atom prop_click_methods_available;
+static Atom prop_click_method_enabled;
 
 /* general properties */
 static Atom prop_float;
@@ -1593,6 +1639,48 @@ LibinputSetPropertyScrollButton(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyClickMethod(DeviceIntPtr dev,
+			       Atom atom,
+			       XIPropertyValuePtr val,
+			       BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	BOOL* data;
+	uint32_t modes = 0;
+
+	if (val->format != 8 || val->size != 2 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+
+	if (data[0])
+		modes |= LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
+	if (data[1])
+		modes |= LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER;
+
+	if (checkonly) {
+		uint32_t supported;
+
+		if (__builtin_popcount(modes) > 1)
+			return BadValue;
+
+		if (!xf86libinput_check_device(dev, atom))
+			return BadMatch;
+
+		supported = libinput_device_config_click_get_methods(device);
+		if (modes && (modes & supported) == 0)
+			return BadValue;
+	} else {
+		driver_data->options.click_method = modes;
+	}
+
+	return Success;
+}
+
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -1620,6 +1708,10 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyScrollMethods(dev, atom, val, checkonly);
 	else if (atom == prop_scroll_button)
 		rc = LibinputSetPropertyScrollButton(dev, atom, val, checkonly);
+	else if (atom == prop_click_methods_available)
+		return BadAccess; /* read-only */
+	else if (atom == prop_click_method_enabled)
+		rc = LibinputSetPropertyClickMethod(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id)
 		return BadAccess; /* read-only */
 	else
@@ -1884,6 +1976,73 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitClickMethodsProperty(DeviceIntPtr dev,
+				 struct xf86libinput *driver_data,
+				 struct libinput_device *device)
+{
+	uint32_t click_methods;
+	enum libinput_config_click_method method;
+	BOOL methods[2] = {FALSE};
+	int rc;
+
+	click_methods = libinput_device_config_click_get_methods(device);
+	if (click_methods == LIBINPUT_CONFIG_CLICK_METHOD_NONE)
+		return;
+
+	if (click_methods & LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS)
+		methods[0] = TRUE;
+	if (click_methods & LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER)
+		methods[1] = TRUE;
+
+	prop_click_methods_available =
+		MakeAtom(LIBINPUT_PROP_CLICK_METHODS_AVAILABLE,
+			 strlen(LIBINPUT_PROP_CLICK_METHODS_AVAILABLE),
+			 TRUE);
+	rc = XIChangeDeviceProperty(dev,
+				    prop_click_methods_available,
+				    XA_INTEGER, 8,
+				    PropModeReplace,
+				    ARRAY_SIZE(methods),
+				    &methods, FALSE);
+	if (rc != Success)
+		return;
+	XISetDevicePropertyDeletable(dev,
+				     prop_click_methods_available,
+				     FALSE);
+
+	memset(methods, 0, sizeof(methods));
+
+	method = libinput_device_config_click_get_method(device);
+	switch(method) {
+	case LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS:
+		methods[0] = TRUE;
+		break;
+	case LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER:
+		methods[1] = TRUE;
+		break;
+	default:
+		break;
+	}
+
+	prop_click_method_enabled =
+		MakeAtom(LIBINPUT_PROP_CLICK_METHOD_ENABLED,
+			 strlen(LIBINPUT_PROP_CLICK_METHOD_ENABLED),
+			 TRUE);
+	rc = XIChangeDeviceProperty(dev,
+				    prop_click_method_enabled,
+				    XA_INTEGER, 8,
+				    PropModeReplace,
+				    ARRAY_SIZE(methods),
+				    &methods, FALSE);
+	if (rc != Success)
+		return;
+
+	XISetDevicePropertyDeletable(dev,
+				     prop_click_method_enabled,
+				     FALSE);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -1902,6 +2061,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitSendEventsProperty(dev, driver_data, device);
 	LibinputInitLeftHandedProperty(dev, driver_data, device);
 	LibinputInitScrollMethodsProperty(dev, driver_data, device);
+	LibinputInitClickMethodsProperty(dev, driver_data, device);
 
 	/* Device node property, read-only  */
 	device_node = driver_data->path;

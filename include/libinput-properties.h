@@ -58,4 +58,12 @@
 /* Scroll button for button scrolling: 32-bit int, 1 value */
 #define LIBINPUT_PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
 
+/* Click method: BOOL read-only, 2 values in order buttonareas, clickfinger
+   shows available click methods */
+#define LIBINPUT_PROP_CLICK_METHODS_AVAILABLE "libinput Click Methods Available"
+
+/* Click method: BOOL, 2 values in order buttonareas, clickfinger
+   only one enabled at a time at max */
+#define LIBINPUT_PROP_CLICK_METHOD_ENABLED "libinput Click Method Enabled"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

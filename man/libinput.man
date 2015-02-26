@@ -53,6 +53,14 @@ A string of 9 space-separated floating point numbers.
 Sets the calibration matrix to the 3x3 matrix where the first row is (abc),
 the second row is (def) and the third row is (ghi).
 .TP 7
+.BI "Option \*qClickMethod\*q \*q" string \*q
+Enables a click method. Permitted values are
+.BI none,
+.BI buttonareas,
+.BI clickfinger.
+Not all devices support all methods, if an option is unsupported, the
+default click method for this device is used.
+.TP 7
 .BI "Option \*qLeftHanded\*q \*q" bool \*q
 Enables left-handed button orientation, i.e. swapping left and right buttons.
 .TP 7
