@@ -632,12 +632,12 @@ xf86libinput_init(DeviceIntPtr dev)
 	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
 		xf86libinput_init_touch(pInfo);
 
+	LibinputInitProperty(dev);
+	XIRegisterPropertyHandler(dev, LibinputSetProperty, NULL, NULL);
+
 	/* unref the device now, because we'll get a new ref during
 	   DEVICE_ON */
 	libinput_device_unref(device);
-
-        LibinputInitProperty(dev);
-        XIRegisterPropertyHandler(dev, LibinputSetProperty, NULL, NULL);
 
 	return 0;
 }
