@@ -756,18 +756,22 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 
 	axis = LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL;
 	if (libinput_event_pointer_has_axis(event, axis)) {
-		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL)
+		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-		else
+			value *=  driver_data->scroll_vdist;
+		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
+		}
 		valuator_mask_set_double(mask, 3, value);
 	}
 	axis = LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL;
 	if (libinput_event_pointer_has_axis(event, axis)) {
-		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL)
+		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-		else
+			value *=  driver_data->scroll_hdist;
+		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
+		}
 		valuator_mask_set_double(mask, 2, value);
 	}
 
@@ -1189,8 +1193,8 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	if (!driver_data->valuators)
 		goto fail;
 
-	driver_data->scroll_vdist = 1;
-	driver_data->scroll_hdist = 1;
+	driver_data->scroll_vdist = 15;
+	driver_data->scroll_hdist = 15;
 
 	path = xf86SetStrOption(pInfo->options, "Device", NULL);
 	if (!path)
