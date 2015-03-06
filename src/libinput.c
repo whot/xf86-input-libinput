@@ -1177,7 +1177,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	struct xf86libinput *driver_data = NULL;
         struct libinput *libinput = NULL;
 	struct libinput_device *device;
-	char *path;
+	char *path = NULL;
 
 	pInfo->type_name = 0;
 	pInfo->device_control = xf86libinput_device_control;
