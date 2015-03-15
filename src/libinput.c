@@ -1727,23 +1727,44 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 	return rc;
 }
 
+static Atom
+LibinputMakeProperty(DeviceIntPtr dev,
+		     const char *prop_name,
+		     Atom type,
+		     int format,
+		     int len,
+		     void *data)
+{
+	int rc;
+	Atom prop = MakeAtom(prop_name, strlen(prop_name), TRUE);
+
+	rc = XIChangeDeviceProperty(dev, prop, type, format,
+				    PropModeReplace,
+				    len, data, FALSE);
+	if (rc != Success)
+		return None;
+
+	XISetDevicePropertyDeletable(dev, prop, FALSE);
+
+	return prop;
+}
+
 static void
 LibinputInitTapProperty(DeviceIntPtr dev,
 			struct xf86libinput *driver_data,
 			struct libinput_device *device)
 {
 	BOOL tap = driver_data->options.tapping;
-	int rc;
 
 	if (libinput_device_config_tap_get_finger_count(device) == 0)
 		return;
 
-	prop_tap = MakeAtom(LIBINPUT_PROP_TAP, strlen(LIBINPUT_PROP_TAP), TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_tap, XA_INTEGER, 8,
-				    PropModeReplace, 1, &tap, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_tap, FALSE);
+	prop_tap = LibinputMakeProperty(dev,
+					LIBINPUT_PROP_TAP,
+					XA_INTEGER,
+					8,
+					1,
+					&tap);
 }
 
 static void
@@ -1752,7 +1773,6 @@ LibinputInitCalibrationProperty(DeviceIntPtr dev,
 				struct libinput_device *device)
 {
 	float calibration[9];
-	int rc;
 
 	if (!libinput_device_config_calibration_has_matrix(device))
 		return;
@@ -1765,15 +1785,10 @@ LibinputInitCalibrationProperty(DeviceIntPtr dev,
 	calibration[7] = 0;
 	calibration[8] = 1;
 
-	prop_calibration = MakeAtom(LIBINPUT_PROP_CALIBRATION,
-				    strlen(LIBINPUT_PROP_CALIBRATION),
-				    TRUE);
-
-	rc = XIChangeDeviceProperty(dev, prop_calibration, prop_float, 32,
-				    PropModeReplace, 9, calibration, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_calibration, FALSE);
+	prop_calibration = LibinputMakeProperty(dev,
+						LIBINPUT_PROP_CALIBRATION,
+						prop_float, 32,
+						9, calibration);
 }
 
 static void
@@ -1782,17 +1797,14 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 			  struct libinput_device *device)
 {
 	float speed = driver_data->options.speed;
-	int rc;
 
 	if (!libinput_device_config_accel_is_available(device))
 		return;
 
-	prop_accel = MakeAtom(LIBINPUT_PROP_ACCEL, strlen(LIBINPUT_PROP_ACCEL), TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_accel, prop_float, 32,
-				    PropModeReplace, 1, &speed, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_accel, FALSE);
+	prop_accel = LibinputMakeProperty(dev,
+					  LIBINPUT_PROP_ACCEL,
+					  prop_float, 32,
+					  1, &speed);
 }
 
 static void
@@ -1801,19 +1813,14 @@ LibinputInitNaturalScrollProperty(DeviceIntPtr dev,
 				  struct libinput_device *device)
 {
 	BOOL natural_scroll = driver_data->options.natural_scrolling;
-	int rc;
 
 	if (!libinput_device_config_scroll_has_natural_scroll(device))
 		return;
 
-	prop_natural_scroll = MakeAtom(LIBINPUT_PROP_NATURAL_SCROLL,
-				       strlen(LIBINPUT_PROP_NATURAL_SCROLL),
-				       TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_natural_scroll, XA_INTEGER, 8,
-				    PropModeReplace, 1, &natural_scroll, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_natural_scroll, FALSE);
+	prop_natural_scroll = LibinputMakeProperty(dev,
+						   LIBINPUT_PROP_NATURAL_SCROLL,
+						   XA_INTEGER, 8,
+						   1, &natural_scroll);
 }
 
 static void
@@ -1824,7 +1831,6 @@ LibinputInitSendEventsProperty(DeviceIntPtr dev,
 	uint32_t sendevent_modes;
 	uint32_t sendevents;
 	BOOL modes[2] = {FALSE};
-	int rc;
 
 	sendevent_modes = libinput_device_config_send_events_get_modes(device);
 	if (sendevent_modes == LIBINPUT_CONFIG_SEND_EVENTS_ENABLED)
@@ -1835,15 +1841,12 @@ LibinputInitSendEventsProperty(DeviceIntPtr dev,
 	if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE)
 		modes[1] = TRUE;
 
-	prop_sendevents_available = MakeAtom(LIBINPUT_PROP_SENDEVENTS_AVAILABLE,
-					     strlen(LIBINPUT_PROP_SENDEVENTS_AVAILABLE),
-					     TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_sendevents_available,
-				    XA_INTEGER, 8,
-				    PropModeReplace, 2, modes, FALSE);
-	if (rc != Success)
+	prop_sendevents_available = LibinputMakeProperty(dev,
+							 LIBINPUT_PROP_SENDEVENTS_AVAILABLE,
+							 XA_INTEGER, 8,
+							 2, modes);
+	if (!prop_sendevents_available)
 		return;
-	XISetDevicePropertyDeletable(dev, prop_sendevents_available, FALSE);
 
 	memset(modes, 0, sizeof(modes));
 	sendevents = driver_data->options.sendevents;
@@ -1857,15 +1860,10 @@ LibinputInitSendEventsProperty(DeviceIntPtr dev,
 		break;
 	}
 
-	prop_sendevents_enabled = MakeAtom(LIBINPUT_PROP_SENDEVENTS_ENABLED,
-					   strlen(LIBINPUT_PROP_SENDEVENTS_ENABLED),
-					   TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_sendevents_enabled,
-				    XA_INTEGER, 8,
-				    PropModeReplace, 2, modes, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_sendevents_enabled, FALSE);
+	prop_sendevents_enabled = LibinputMakeProperty(dev,
+						       LIBINPUT_PROP_SENDEVENTS_ENABLED,
+						       XA_INTEGER, 8,
+						       2, modes);
 }
 
 static void
@@ -1874,20 +1872,14 @@ LibinputInitLeftHandedProperty(DeviceIntPtr dev,
 			       struct libinput_device *device)
 {
 	BOOL left_handed = driver_data->options.left_handed;
-	int rc;
 
 	if (!libinput_device_config_left_handed_is_available(device))
 		return;
 
-	prop_left_handed = MakeAtom(LIBINPUT_PROP_LEFT_HANDED,
-				    strlen(LIBINPUT_PROP_LEFT_HANDED),
-				    TRUE);
-	rc = XIChangeDeviceProperty(dev, prop_left_handed,
-				    XA_INTEGER, 8,
-				    PropModeReplace, 1, &left_handed, FALSE);
-	if (rc != Success)
-		return;
-	XISetDevicePropertyDeletable(dev, prop_left_handed, FALSE);
+	prop_left_handed = LibinputMakeProperty(dev,
+						LIBINPUT_PROP_LEFT_HANDED,
+						XA_INTEGER, 8,
+						1, &left_handed);
 }
 
 static void
@@ -1898,7 +1890,6 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 	uint32_t scroll_methods;
 	enum libinput_config_scroll_method method;
 	BOOL methods[3] = {FALSE};
-	int rc;
 
 	scroll_methods = libinput_device_config_scroll_get_methods(device);
 	if (scroll_methods == LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
@@ -1911,21 +1902,13 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN)
 		methods[2] = TRUE;
 
-	prop_scroll_methods_available =
-		MakeAtom(LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE,
-			 strlen(LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE),
-			 TRUE);
-	rc = XIChangeDeviceProperty(dev,
-				    prop_scroll_methods_available,
-				    XA_INTEGER, 8,
-				    PropModeReplace,
-				    ARRAY_SIZE(methods),
-				    &methods, FALSE);
-	if (rc != Success)
+	prop_scroll_methods_available = LibinputMakeProperty(dev,
+							     LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE,
+							     XA_INTEGER, 8,
+							     ARRAY_SIZE(methods),
+							     &methods);
+	if (!prop_scroll_methods_available)
 		return;
-	XISetDevicePropertyDeletable(dev,
-				     prop_scroll_methods_available,
-				     FALSE);
 
 	memset(methods, 0, sizeof(methods));
 
@@ -1944,38 +1927,23 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 		break;
 	}
 
-	prop_scroll_method_enabled =
-		MakeAtom(LIBINPUT_PROP_SCROLL_METHOD_ENABLED,
-			 strlen(LIBINPUT_PROP_SCROLL_METHOD_ENABLED),
-			 TRUE);
-	rc = XIChangeDeviceProperty(dev,
-				    prop_scroll_method_enabled,
-				    XA_INTEGER, 8,
-				    PropModeReplace,
-				    ARRAY_SIZE(methods),
-				    &methods, FALSE);
-	if (rc != Success)
+	prop_scroll_method_enabled = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_SCROLL_METHOD_ENABLED,
+							  XA_INTEGER, 8,
+							  ARRAY_SIZE(methods),
+							  &methods);
+	if (!prop_scroll_method_enabled)
 		return;
-
-	XISetDevicePropertyDeletable(dev,
-				     prop_scroll_method_enabled,
-				     FALSE);
 
 	/* Scroll button */
 	if (libinput_device_config_scroll_get_methods(device) &
 	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
 		CARD32 scroll_button = driver_data->options.scroll_button;
 
-		prop_scroll_button = MakeAtom(LIBINPUT_PROP_SCROLL_BUTTON,
-					    strlen(LIBINPUT_PROP_SCROLL_BUTTON),
-					    TRUE);
-		rc = XIChangeDeviceProperty(dev, prop_scroll_button,
-					    XA_CARDINAL, 32,
-					    PropModeReplace, 1,
-					    &scroll_button, FALSE);
-		if (rc != Success)
-			return;
-		XISetDevicePropertyDeletable(dev, prop_scroll_button, FALSE);
+		prop_scroll_button = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_SCROLL_BUTTON,
+							  XA_CARDINAL, 32,
+							  1, &scroll_button);
 	}
 }
 
@@ -1987,7 +1955,6 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 	uint32_t click_methods;
 	enum libinput_config_click_method method;
 	BOOL methods[2] = {FALSE};
-	int rc;
 
 	click_methods = libinput_device_config_click_get_methods(device);
 	if (click_methods == LIBINPUT_CONFIG_CLICK_METHOD_NONE)
@@ -1998,21 +1965,13 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 	if (click_methods & LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER)
 		methods[1] = TRUE;
 
-	prop_click_methods_available =
-		MakeAtom(LIBINPUT_PROP_CLICK_METHODS_AVAILABLE,
-			 strlen(LIBINPUT_PROP_CLICK_METHODS_AVAILABLE),
-			 TRUE);
-	rc = XIChangeDeviceProperty(dev,
-				    prop_click_methods_available,
-				    XA_INTEGER, 8,
-				    PropModeReplace,
-				    ARRAY_SIZE(methods),
-				    &methods, FALSE);
-	if (rc != Success)
+	prop_click_methods_available = LibinputMakeProperty(dev,
+							    LIBINPUT_PROP_CLICK_METHODS_AVAILABLE,
+							    XA_INTEGER, 8,
+							    ARRAY_SIZE(methods),
+							    &methods);
+	if (!prop_click_methods_available)
 		return;
-	XISetDevicePropertyDeletable(dev,
-				     prop_click_methods_available,
-				     FALSE);
 
 	memset(methods, 0, sizeof(methods));
 
@@ -2028,22 +1987,11 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 		break;
 	}
 
-	prop_click_method_enabled =
-		MakeAtom(LIBINPUT_PROP_CLICK_METHOD_ENABLED,
-			 strlen(LIBINPUT_PROP_CLICK_METHOD_ENABLED),
-			 TRUE);
-	rc = XIChangeDeviceProperty(dev,
-				    prop_click_method_enabled,
-				    XA_INTEGER, 8,
-				    PropModeReplace,
-				    ARRAY_SIZE(methods),
-				    &methods, FALSE);
-	if (rc != Success)
-		return;
-
-	XISetDevicePropertyDeletable(dev,
-				     prop_click_method_enabled,
-				     FALSE);
+	prop_click_method_enabled = LibinputMakeProperty(dev,
+							 LIBINPUT_PROP_CLICK_METHOD_ENABLED,
+							 XA_INTEGER, 8,
+							 ARRAY_SIZE(methods),
+							 &methods);
 }
 
 static void
