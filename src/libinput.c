@@ -1327,17 +1327,26 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 
 /* libinput-specific properties */
 static Atom prop_tap;
+static Atom prop_tap_default;
 static Atom prop_calibration;
+static Atom prop_calibration_default;
 static Atom prop_accel;
+static Atom prop_accel_default;
 static Atom prop_natural_scroll;
+static Atom prop_natural_scroll_default;
 static Atom prop_sendevents_available;
 static Atom prop_sendevents_enabled;
+static Atom prop_sendevents_default;
 static Atom prop_left_handed;
+static Atom prop_left_handed_default;
 static Atom prop_scroll_methods_available;
 static Atom prop_scroll_method_enabled;
+static Atom prop_scroll_method_default;
 static Atom prop_scroll_button;
+static Atom prop_scroll_button_default;
 static Atom prop_click_methods_available;
 static Atom prop_click_method_enabled;
+static Atom prop_click_method_default;
 
 /* general properties */
 static Atom prop_float;
@@ -1716,7 +1725,16 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		return BadAccess; /* read-only */
 	else if (atom == prop_click_method_enabled)
 		rc = LibinputSetPropertyClickMethod(dev, atom, val, checkonly);
-	else if (atom == prop_device || atom == prop_product_id)
+	else if (atom == prop_device || atom == prop_product_id ||
+		 atom == prop_tap_default ||
+		 atom == prop_calibration_default ||
+		 atom == prop_accel_default ||
+		 atom == prop_natural_scroll_default ||
+		 atom == prop_sendevents_default ||
+		 atom == prop_left_handed_default ||
+		 atom == prop_scroll_method_default ||
+		 atom == prop_scroll_button_default ||
+		 atom == prop_click_method_default)
 		return BadAccess; /* read-only */
 	else
 		return Success;
@@ -1765,6 +1783,14 @@ LibinputInitTapProperty(DeviceIntPtr dev,
 					8,
 					1,
 					&tap);
+	if (!prop_tap)
+		return;
+
+	tap = libinput_device_config_tap_get_default_enabled(device);
+	prop_tap_default = LibinputMakeProperty(dev,
+						LIBINPUT_PROP_TAP_DEFAULT,
+						XA_INTEGER, 8,
+						1, &tap);
 }
 
 static void
@@ -1789,6 +1815,16 @@ LibinputInitCalibrationProperty(DeviceIntPtr dev,
 						LIBINPUT_PROP_CALIBRATION,
 						prop_float, 32,
 						9, calibration);
+	if (!prop_calibration)
+		return;
+
+	libinput_device_config_calibration_get_default_matrix(device,
+							      calibration);
+
+	prop_calibration_default = LibinputMakeProperty(dev,
+							LIBINPUT_PROP_CALIBRATION_DEFAULT,
+							prop_float, 32,
+							9, calibration);
 }
 
 static void
@@ -1805,6 +1841,14 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 					  LIBINPUT_PROP_ACCEL,
 					  prop_float, 32,
 					  1, &speed);
+	if (!prop_accel)
+		return;
+
+	speed = libinput_device_config_accel_get_default_speed(device);
+	prop_accel_default = LibinputMakeProperty(dev,
+						  LIBINPUT_PROP_ACCEL_DEFAULT,
+						  prop_float, 32,
+						  1, &speed);
 }
 
 static void
@@ -1821,6 +1865,14 @@ LibinputInitNaturalScrollProperty(DeviceIntPtr dev,
 						   LIBINPUT_PROP_NATURAL_SCROLL,
 						   XA_INTEGER, 8,
 						   1, &natural_scroll);
+	if (!prop_natural_scroll)
+		return;
+
+	natural_scroll = libinput_device_config_scroll_get_default_natural_scroll_enabled(device);
+	prop_natural_scroll_default = LibinputMakeProperty(dev,
+							   LIBINPUT_PROP_NATURAL_SCROLL_DEFAULT,
+							   XA_INTEGER, 8,
+							   1, &natural_scroll);
 }
 
 static void
@@ -1864,6 +1916,21 @@ LibinputInitSendEventsProperty(DeviceIntPtr dev,
 						       LIBINPUT_PROP_SENDEVENTS_ENABLED,
 						       XA_INTEGER, 8,
 						       2, modes);
+
+	if (!prop_sendevents_enabled)
+		return;
+
+	memset(modes, 0, sizeof(modes));
+	sendevent_modes = libinput_device_config_send_events_get_default_mode(device);
+	if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED)
+		modes[0] = TRUE;
+	if (sendevent_modes & LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE)
+		modes[1] = TRUE;
+
+	prop_sendevents_default = LibinputMakeProperty(dev,
+						       LIBINPUT_PROP_SENDEVENTS_ENABLED_DEFAULT,
+						       XA_INTEGER, 8,
+						       2, modes);
 }
 
 static void
@@ -1880,6 +1947,14 @@ LibinputInitLeftHandedProperty(DeviceIntPtr dev,
 						LIBINPUT_PROP_LEFT_HANDED,
 						XA_INTEGER, 8,
 						1, &left_handed);
+	if (!prop_left_handed)
+		return;
+
+	left_handed = libinput_device_config_left_handed_get_default(device);
+	prop_left_handed_default = LibinputMakeProperty(dev,
+							LIBINPUT_PROP_LEFT_HANDED_DEFAULT,
+							XA_INTEGER, 8,
+							1, &left_handed);
 }
 
 static void
@@ -1935,6 +2010,22 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 	if (!prop_scroll_method_enabled)
 		return;
 
+	scroll_methods = libinput_device_config_scroll_get_default_method(device);
+	if (scroll_methods == LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
+		return;
+
+	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_2FG)
+		methods[0] = TRUE;
+	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_EDGE)
+		methods[1] = TRUE;
+	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN)
+		methods[2] = TRUE;
+
+	prop_scroll_method_default = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_SCROLL_METHOD_ENABLED_DEFAULT,
+							  XA_INTEGER, 8,
+							  ARRAY_SIZE(methods),
+							  &methods);
 	/* Scroll button */
 	if (libinput_device_config_scroll_get_methods(device) &
 	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
@@ -1944,6 +2035,14 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 							  LIBINPUT_PROP_SCROLL_BUTTON,
 							  XA_CARDINAL, 32,
 							  1, &scroll_button);
+		if (!prop_scroll_button)
+			return;
+
+		scroll_button = libinput_device_config_scroll_get_default_button(device);
+		prop_scroll_button_default = LibinputMakeProperty(dev,
+								  LIBINPUT_PROP_SCROLL_BUTTON_DEFAULT,
+								  XA_CARDINAL, 32,
+								  1, &scroll_button);
 	}
 }
 
@@ -1989,6 +2088,29 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 
 	prop_click_method_enabled = LibinputMakeProperty(dev,
 							 LIBINPUT_PROP_CLICK_METHOD_ENABLED,
+							 XA_INTEGER, 8,
+							 ARRAY_SIZE(methods),
+							 &methods);
+
+	if (!prop_click_method_enabled)
+		return;
+
+	memset(methods, 0, sizeof(methods));
+
+	method = libinput_device_config_click_get_default_method(device);
+	switch(method) {
+	case LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS:
+		methods[0] = TRUE;
+		break;
+	case LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER:
+		methods[1] = TRUE;
+		break;
+	default:
+		break;
+	}
+
+	prop_click_method_default = LibinputMakeProperty(dev,
+							 LIBINPUT_PROP_CLICK_METHOD_ENABLED_DEFAULT,
 							 XA_INTEGER, 8,
 							 ARRAY_SIZE(methods),
 							 &methods);

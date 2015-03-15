@@ -27,14 +27,26 @@
 /* Tapping enabled/disabled: BOOL, 1 value */
 #define LIBINPUT_PROP_TAP "libinput Tapping Enabled"
 
+/* Tapping default enabled/disabled: BOOL, 1 value, read-only */
+#define LIBINPUT_PROP_TAP_DEFAULT "libinput Tapping Enabled Default"
+
 /* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
 #define LIBINPUT_PROP_CALIBRATION "libinput Calibration Matrix"
+
+/* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows, read-only*/
+#define LIBINPUT_PROP_CALIBRATION_DEFAULT "libinput Calibration Matrix Default"
 
 /* Pointer accel speed: FLOAT, 1 value, 32 bit */
 #define LIBINPUT_PROP_ACCEL "libinput Accel Speed"
 
+/* Pointer accel speed: FLOAT, 1 value, 32 bit, read-only*/
+#define LIBINPUT_PROP_ACCEL_DEFAULT "libinput Accel Speed Default"
+
 /* Natural scrolling: BOOL, 1 value */
 #define LIBINPUT_PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
+
+/* Natural scrolling: BOOL, 1 value, read-only */
+#define LIBINPUT_PROP_NATURAL_SCROLL_DEFAULT "libinput Natural Scrolling Enabled Default"
 
 /* Send-events mode: BOOL read-only, 2 values in order disabled,
    disabled-on-external-mouse */
@@ -44,8 +56,15 @@
    disabled-on-external-mouse */
 #define LIBINPUT_PROP_SENDEVENTS_ENABLED "libinput Send Events Mode Enabled"
 
+/* Send-events mode: BOOL, 2 values in order disabled,
+   disabled-on-external-mouse, read-only */
+#define LIBINPUT_PROP_SENDEVENTS_ENABLED_DEFAULT "libinput Send Events Mode Enabled Default"
+
 /* Left-handed enabled/disabled: BOOL, 1 value */
 #define LIBINPUT_PROP_LEFT_HANDED "libinput Left Handed Enabled"
+
+/* Left-handed enabled/disabled: BOOL, 1 value, read-only */
+#define LIBINPUT_PROP_LEFT_HANDED_DEFAULT "libinput Left Handed Enabled Default"
 
 /* Scroll method: BOOL read-only, 3 values in order 2fg, edge, button.
    shows available scroll methods */
@@ -55,8 +74,15 @@
    only one is enabled at a time at max */
 #define LIBINPUT_PROP_SCROLL_METHOD_ENABLED "libinput Scroll Method Enabled"
 
+/* Scroll method: BOOL, 3 values in order 2fg, edge, button
+   only one is enabled at a time at max, read-only */
+#define LIBINPUT_PROP_SCROLL_METHOD_ENABLED_DEFAULT "libinput Scroll Method Enabled Default"
+
 /* Scroll button for button scrolling: 32-bit int, 1 value */
 #define LIBINPUT_PROP_SCROLL_BUTTON "libinput Button Scrolling Button"
+
+/* Scroll button for button scrolling: 32-bit int, 1 value, read-only */
+#define LIBINPUT_PROP_SCROLL_BUTTON_DEFAULT "libinput Button Scrolling Button Default"
 
 /* Click method: BOOL read-only, 2 values in order buttonareas, clickfinger
    shows available click methods */
@@ -66,4 +92,7 @@
    only one enabled at a time at max */
 #define LIBINPUT_PROP_CLICK_METHOD_ENABLED "libinput Click Method Enabled"
 
+/* Click method: BOOL, 2 values in order buttonareas, clickfinger
+   only one enabled at a time at max, read-only */
+#define LIBINPUT_PROP_CLICK_METHOD_ENABLED_DEFAULT "libinput Click Method Enabled Default"
 #endif /* _LIBINPUT_PROPERTIES_H_ */

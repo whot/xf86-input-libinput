@@ -151,6 +151,10 @@ Indicates which click methods are available on this device.
 .BI "libinput Click Methods Enabled"
 2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
 Indicates which click methods are enabled on this device.
+.PP
+The above properties have a
+.BI "libinput <property name> Default"
+equivalent that indicates the default value for this setting on this device.
 
 .SH AUTHORS
 Peter Hutterer
