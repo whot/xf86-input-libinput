@@ -1685,7 +1685,6 @@ LibinputSetPropertyClickMethod(DeviceIntPtr dev,
 	return Success;
 }
 
-
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
