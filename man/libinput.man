@@ -96,7 +96,11 @@ configuration option. For all options, the default value is the one used by
 libinput. On configuration failure, the default value is applied.
 
 .SH SUPPORTED PROPERTIES
-The following properties are provided by the
+.B libinput
+exports runtime-configurable options as properties. If a property listed
+below is not available, the matching configuration option is not available
+on the device. This however does not imply that the feature is not available
+on the device. The following properties are provided by the
 .B libinput
 driver.
 .TP 7
@@ -113,9 +117,40 @@ driver.
 .BI "libinput Natural Scrolling Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables natural scrolling
 .TP 7
-.BI "libinput Send Events Mode"
-1 32-bit value, defines the sendevent mode. See the libinput documentation
-for the allowed values.
+.BI "libinput Send Events Modes Available"
+2 boolean values (8 bit, 0 or 1), in order "disabled" and
+"disabled-on-external-mouse". Indicates which send-event modes are available
+on this device.
+.TP 7
+.BI "libinput Send Events Mode Enabled"
+2 boolean values (8 bit, 0 or 1), in order "disabled" and
+"disabled-on-external-mouse". Indicates which send-event modes is currently
+enabled on this device.
+.TP 7
+.BI "libinput Left Handed Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates if left-handed mode is enabled or
+disabled.
+.TP 7
+.BI "libinput Scroll Methods Available"
+3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
+Indicates which scroll methods are available on this device.
+.TP 7
+.BI "libinput Scroll Method Enabled"
+3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
+Indicates which scroll method is currently enabled on this device.
+.TP 7
+.BI "libinput Button Scrolling Button"
+1 32-bit value. Sets the button number to use for button scrolling. This
+setting is independent of the scroll method, to enable button scrolling the
+method must be set to button-scrolling and a valid button must be set.
+.TP 7
+.BI "libinput Click Methods Available"
+2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
+Indicates which click methods are available on this device.
+.TP 7
+.BI "libinput Click Methods Enabled"
+2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
+Indicates which click methods are enabled on this device.
 
 .SH AUTHORS
 Peter Hutterer
