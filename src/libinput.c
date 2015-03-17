@@ -225,7 +225,7 @@ LibinputApplyConfig(DeviceIntPtr dev)
 	    libinput_device_config_send_events_set_mode(device,
 							driver_data->options.sendevents) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 		xf86IDrvMsg(pInfo, X_ERROR,
-			    "Failed to set SendEventsMode %d\n",
+			    "Failed to set SendEventsMode %u\n",
 			    driver_data->options.sendevents);
 
 	if (libinput_device_config_scroll_has_natural_scroll(device) &&
@@ -289,7 +289,7 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		scroll_button = btn_xorg2linux(driver_data->options.scroll_button);
 		if (libinput_device_config_scroll_set_button(device, scroll_button) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 			xf86IDrvMsg(pInfo, X_ERROR,
-				    "Failed to set ScrollButton to %d\n",
+				    "Failed to set ScrollButton to %u\n",
 				    driver_data->options.scroll_button);
 	}
 
@@ -1041,7 +1041,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		if (libinput_device_config_send_events_set_mode(device, mode) !=
 		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
 			xf86IDrvMsg(pInfo, X_ERROR,
-				    "Failed to set SendEventsMode %d\n", mode);
+				    "Failed to set SendEventsMode %u\n", mode);
 			mode = libinput_device_config_send_events_get_mode(device);
 		}
 		driver_data->options.sendevents = mode;
@@ -1135,7 +1135,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		if (libinput_device_config_scroll_set_button(device,
 							     b) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
 			xf86IDrvMsg(pInfo, X_ERROR,
-				    "Failed to set ScrollButton to %d\n",
+				    "Failed to set ScrollButton to %u\n",
 				    scroll_button);
 			scroll_button = btn_linux2xorg(libinput_device_config_scroll_get_button(device));
 		}
@@ -1355,7 +1355,7 @@ xf86libinput_check_device (DeviceIntPtr dev,
 	if (device == NULL) {
 		BUG_WARN(dev->public.on);
 		xf86IDrvMsg(pInfo, X_INFO,
-			    "SetProperty on %d called but device is disabled.\n"
+			    "SetProperty on %u called but device is disabled.\n"
 			    "This driver cannot change properties on a disabled device\n",
 			    atom);
 		return FALSE;
