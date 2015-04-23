@@ -89,6 +89,7 @@ struct xf86libinput {
 		BOOL tapping;
 		BOOL natural_scrolling;
 		BOOL left_handed;
+		BOOL middle_emulation;
 		CARD32 sendevents;
 		CARD32 scroll_button; /* xorg button number */
 		float speed;
@@ -309,6 +310,13 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    "Failed to set click method to %s\n",
 			    method);
 	}
+
+	if (libinput_device_config_middle_emulation_is_available(device) &&
+	    libinput_device_config_middle_emulation_set_enabled(device,
+								driver_data->options.middle_emulation) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set MiddleEmulation to %d\n",
+			    driver_data->options.middle_emulation);
 }
 
 static int
@@ -1167,6 +1175,20 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		driver_data->options.click_method = m;
 		free(method);
 	}
+
+	if (libinput_device_config_middle_emulation_is_available(device)) {
+		BOOL enabled = xf86SetBoolOption(pInfo->options,
+						 "MiddleEmulation",
+						 libinput_device_config_middle_emulation_get_default_enabled(device));
+		if (libinput_device_config_middle_emulation_set_enabled(device, enabled) !=
+		    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to set MiddleEmulation to %d\n",
+				    enabled);
+			enabled = libinput_device_config_middle_emulation_get_enabled(device);
+		}
+		driver_data->options.middle_emulation = enabled;
+	}
 }
 
 static int
@@ -1347,6 +1369,8 @@ static Atom prop_scroll_button_default;
 static Atom prop_click_methods_available;
 static Atom prop_click_method_enabled;
 static Atom prop_click_method_default;
+static Atom prop_middle_emulation;
+static Atom prop_middle_emulation_default;
 
 /* general properties */
 static Atom prop_float;
@@ -1694,6 +1718,37 @@ LibinputSetPropertyClickMethod(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyMiddleEmulation(DeviceIntPtr dev,
+				   Atom atom,
+				   XIPropertyValuePtr val,
+				   BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	BOOL* data;
+
+	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+	if (checkonly) {
+		if (*data != 0 && *data != 1)
+			return BadValue;
+
+		if (!xf86libinput_check_device(dev, atom))
+			return BadMatch;
+
+		if (!libinput_device_config_middle_emulation_is_available(device))
+			return BadMatch;
+	} else {
+		driver_data->options.middle_emulation = *data;
+	}
+
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -1725,6 +1780,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		return BadAccess; /* read-only */
 	else if (atom == prop_click_method_enabled)
 		rc = LibinputSetPropertyClickMethod(dev, atom, val, checkonly);
+	else if (atom == prop_middle_emulation)
+		rc = LibinputSetPropertyMiddleEmulation(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_calibration_default ||
@@ -1734,7 +1791,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		 atom == prop_left_handed_default ||
 		 atom == prop_scroll_method_default ||
 		 atom == prop_scroll_button_default ||
-		 atom == prop_click_method_default)
+		 atom == prop_click_method_default ||
+		 atom == prop_middle_emulation_default)
 		return BadAccess; /* read-only */
 	else
 		return Success;
@@ -2117,6 +2175,32 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitMiddleEmulationProperty(DeviceIntPtr dev,
+				    struct xf86libinput *driver_data,
+				    struct libinput_device *device)
+{
+	BOOL middle = driver_data->options.middle_emulation;
+
+	if (!libinput_device_config_middle_emulation_is_available(device))
+		return;
+
+	prop_middle_emulation = LibinputMakeProperty(dev,
+						     LIBINPUT_PROP_MIDDLE_EMULATION_ENABLED,
+						     XA_INTEGER,
+						     8,
+						     1,
+						     &middle);
+	if (!prop_middle_emulation)
+		return;
+
+	middle = libinput_device_config_middle_emulation_get_default_enabled(device);
+	prop_middle_emulation_default = LibinputMakeProperty(dev,
+							     LIBINPUT_PROP_MIDDLE_EMULATION_ENABLED_DEFAULT,
+							     XA_INTEGER, 8,
+							     1, &middle);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -2136,6 +2220,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitLeftHandedProperty(dev, driver_data, device);
 	LibinputInitScrollMethodsProperty(dev, driver_data, device);
 	LibinputInitClickMethodsProperty(dev, driver_data, device);
+	LibinputInitMiddleEmulationProperty(dev, driver_data, device);
 
 	/* Device node property, read-only  */
 	device_node = driver_data->path;

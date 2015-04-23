@@ -95,4 +95,11 @@
 /* Click method: BOOL, 2 values in order buttonareas, clickfinger
    only one enabled at a time at max, read-only */
 #define LIBINPUT_PROP_CLICK_METHOD_ENABLED_DEFAULT "libinput Click Method Enabled Default"
+
+/* Middle button emulation: BOOL, 1 value */
+#define LIBINPUT_PROP_MIDDLE_EMULATION_ENABLED "libinput Middle Emulation Enabled"
+
+/* Middle button emulation: BOOL, 1 value, read-only */
+#define LIBINPUT_PROP_MIDDLE_EMULATION_ENABLED_DEFAULT "libinput Middle Emulation Enabled Default"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

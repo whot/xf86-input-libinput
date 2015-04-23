@@ -64,6 +64,10 @@ default click method for this device is used.
 .BI "Option \*qLeftHanded\*q \*q" bool \*q
 Enables left-handed button orientation, i.e. swapping left and right buttons.
 .TP 7
+.BI "Option \*qMiddleEmulation\*q \*q" bool \*q
+Enables middle button emulation. When enabled, pressing the left and right
+buttons simultaneously produces a middle mouse button click.
+.TP 7
 .BI "Option \*qNaturalScrolling\*q \*q" bool \*q
 Enables or disables natural scrolling behavior.
 .TP 7
@@ -151,6 +155,11 @@ Indicates which click methods are available on this device.
 .BI "libinput Click Methods Enabled"
 2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
 Indicates which click methods are enabled on this device.
+.TP 7
+.BI "libinput Middle Emulation Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates if middle emulation is enabled or
+disabled.
+.TP7
 .PP
 The above properties have a
 .BI "libinput <property name> Default"
