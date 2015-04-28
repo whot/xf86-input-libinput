@@ -50,6 +50,19 @@ The mapping from device node to hardware is system-dependent. Property:
 .BI "Option \*qAccelSpeed\*q \*q" float \*q
 Sets the pointer acceleration speed within the range [-1, 1]
 .TP 7
+.BI "Option \*qButtonMapping\*q \*q" string \*q
+Sets the logical button mapping for this device, see
+XSetPointerMapping(__libmansuffix__). The string must be a
+space-separated list of button mappings in the order of the
+logical buttons on the device, starting with button 1.
+The default mapping is "1 2 3 ... 32". A mapping of 0
+deactivates the button. Multiple buttons can have the same mapping.
+Invalid mapping strings are discarded and the default mapping
+is used for all buttons. Buttons not specified in the user's mapping use the
+default mapping. See section
+.B BUTTON MAPPING
+for more details.
+.TP 7
 .BI "Option \*qCalibrationMatrix\*q \*q" string \*q
 A string of 9 space-separated floating point numbers.
 Sets the calibration matrix to the 3x3 matrix where the first row is (abc),
@@ -166,6 +179,31 @@ disabled.
 The above properties have a
 .BI "libinput <property name> Default"
 equivalent that indicates the default value for this setting on this device.
+
+.SH BUTTON MAPPING
+X clients receive events with logical button numbers, where 1, 2, 3
+are usually interpreted as left, middle, right and logical buttons 4, 5, 6,
+7 are usually interpreted as scroll up, down, left, right. The fourth and
+fifth physical buttons on a device will thus send logical buttons 8 and 9.
+The
+.B ButtonMapping
+option adjusts the logical button mapping, it does not affect how a physical
+button is mapped to a logical button.
+.PP
+Traditionally, a device was set to left-handed button mode by applying a
+button mapping of
+.B "\*q3 2 1 ...\*q"
+On systems using the
+.B libinput
+__xservername__ input driver it is recommended to use the
+.B LeftHanded
+option instead.
+.PP
+The
+.B libinput
+__xservername__ input driver does not use the button mapping after setup.
+Use XSetPointerMapping(__libmansuffix__) to modify the button mapping at
+runtime.
 
 .SH AUTHORS
 Peter Hutterer

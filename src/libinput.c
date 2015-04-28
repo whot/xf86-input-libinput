@@ -96,6 +96,8 @@ struct xf86libinput {
 		float matrix[9];
 		enum libinput_config_scroll_method scroll_method;
 		enum libinput_config_click_method click_method;
+
+		unsigned char btnmap[MAX_BUTTONS + 1];
 	} options;
 };
 
@@ -440,7 +442,6 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	int nbuttons = 7;
 	int i;
 
-	unsigned char btnmap[MAX_BUTTONS + 1];
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
@@ -451,11 +452,11 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 		}
 	}
 
-	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
 
-	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
+	InitPointerDeviceStruct((DevicePtr)dev,
+				driver_data->options.btnmap,
 				nbuttons,
 				btnlabels,
 				xf86libinput_ptr_ctl,
@@ -488,7 +489,6 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 	int nbuttons = 7;
 	int i;
 
-	unsigned char btnmap[MAX_BUTTONS + 1];
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
@@ -499,11 +499,11 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 		}
 	}
 
-	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
 
-	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
+	InitPointerDeviceStruct((DevicePtr)dev,
+				driver_data->options.btnmap,
 				nbuttons,
 				btnlabels,
 				xf86libinput_ptr_ctl,
@@ -589,6 +589,7 @@ static void
 xf86libinput_init_touch(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
 	int min, max, res;
 	unsigned char btnmap[MAX_BUTTONS + 1];
 	Atom btnlabels[MAX_BUTTONS];
@@ -599,7 +600,8 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
 	init_axis_labels(axislabels, ARRAY_SIZE(axislabels));
 
-	InitPointerDeviceStruct((DevicePtr)dev, btnmap,
+	InitPointerDeviceStruct((DevicePtr)dev,
+				driver_data->options.btnmap,
 				nbuttons,
 				btnlabels,
 				xf86libinput_ptr_ctl,
@@ -1264,12 +1266,48 @@ xf86libinput_parse_middleemulation_option(InputInfoPtr pInfo,
 }
 
 static void
+xf86libinput_parse_buttonmap_option(InputInfoPtr pInfo,
+				    unsigned char *btnmap,
+				    size_t size)
+{
+	const int MAXBUTTONS = 32;
+	char *mapping, *map, *s = NULL;
+	int idx = 1;
+
+	init_button_map(btnmap, size);
+
+	mapping = xf86SetStrOption(pInfo->options, "ButtonMapping", NULL);
+	if (!mapping)
+		return;
+
+	map = mapping;
+	do
+	{
+		unsigned long int btn = strtoul(map, &s, 10);
+
+		if (s == map || btn > MAXBUTTONS)
+		{
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "... Invalid button mapping. Using defaults\n");
+			init_button_map(btnmap, size);
+			break;
+		}
+
+		btnmap[idx++] = btn;
+		map = s;
+	} while (s && *s != '\0' && idx < MAXBUTTONS);
+
+	free(mapping);
+}
+
+static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
 			   struct libinput_device *device)
 {
 	struct options *options = &driver_data->options;
 
+	/* libinput options */
 	options->tapping = xf86libinput_parse_tap_option(pInfo, device);
 	options->speed = xf86libinput_parse_accel_option(pInfo, device);
 	options->natural_scrolling = xf86libinput_parse_natscroll_option(pInfo, device);
@@ -1280,6 +1318,11 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	options->click_method = xf86libinput_parse_clickmethod_option(pInfo, device);
 	options->middle_emulation = xf86libinput_parse_middleemulation_option(pInfo, device);
 	xf86libinput_parse_calibration_option(pInfo, device, driver_data->options.matrix);
+
+	/* non-libinput options */
+	xf86libinput_parse_buttonmap_option(pInfo,
+					    options->btnmap,
+					    sizeof(options->btnmap));
 }
 
 static int
