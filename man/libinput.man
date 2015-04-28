@@ -12,6 +12,7 @@ libinput \- libinput-based X.Org input driver
 \ \ ...
 .B EndSection
 .fi
+
 .SH NOTE
 This is the man page for the X input driver. If you are looking for the
 library documentation, go to 
@@ -30,6 +31,7 @@ devices are configured through the
 directive (refer to __xconfigfile__(__filemansuffix__)) instead of manual
 per-device configuration. Devices configured in the
 __xconfigfile__(__filemansuffix__) are not hot-plug capable.
+
 .SH CONFIGURATION DETAILS
 Please refer to __xconfigfile__(__filemansuffix__) for general configuration
 details and for options that can be used with all input drivers.  This
