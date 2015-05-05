@@ -47,6 +47,12 @@
 #define XI86_SERVER_FD 0x20
 #endif
 
+#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) * 1000 + GET_ABI_MINOR(ABI_XINPUT_VERSION) > 22000
+#define HAVE_VMASK_UNACCEL 1
+#else
+#undef HAVE_VMASK_UNACCEL
+#endif
+
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TOUCH_MAX_SLOTS 15
 #define XORG_KEYCODE_OFFSET 8
@@ -88,6 +94,7 @@ struct xf86libinput {
 	BOOL has_abs;
 
 	ValuatorMask *valuators;
+	ValuatorMask *valuators_unaccelerated;
 
 	struct options {
 		BOOL tapping;
@@ -700,9 +707,21 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	y = libinput_event_pointer_get_dy(event);
 
 	valuator_mask_zero(mask);
+
+#if HAVE_VMASK_UNACCEL
+	{
+		double ux, uy;
+
+		ux = libinput_event_pointer_get_dx_unaccelerated(event);
+		uy = libinput_event_pointer_get_dy_unaccelerated(event);
+
+		valuator_mask_set_unaccelerated(mask, 0, x, ux);
+		valuator_mask_set_unaccelerated(mask, 1, y, uy);
+	}
+#else
 	valuator_mask_set_double(mask, 0, x);
 	valuator_mask_set_double(mask, 1, y);
-
+#endif
 	xf86PostMotionEventM(dev, Relative, mask);
 }
 
@@ -1363,6 +1382,10 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	if (!driver_data->valuators)
 		goto fail;
 
+	driver_data->valuators_unaccelerated = valuator_mask_new(2);
+	if (!driver_data->valuators_unaccelerated)
+		goto fail;
+
 	driver_data->scroll.vdist = 15;
 	driver_data->scroll.hdist = 15;
 
@@ -1434,6 +1457,8 @@ fail:
 		fd_pop(&driver_context, pInfo->fd);
 	if (driver_data->valuators)
 		valuator_mask_free(&driver_data->valuators);
+	if (driver_data->valuators_unaccelerated)
+		valuator_mask_free(&driver_data->valuators_unaccelerated);
 	free(path);
 	free(driver_data);
 	return BadValue;
