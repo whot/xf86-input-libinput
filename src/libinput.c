@@ -85,6 +85,8 @@ struct xf86libinput {
 		double y_remainder;
 	} scale;
 
+	BOOL has_abs;
+
 	ValuatorMask *valuators;
 
 	struct options {
@@ -526,6 +528,8 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.hdist, 0);
 	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.vdist, 0);
 
+	driver_data->has_abs = TRUE;
+
 	return Success;
 }
 static void
@@ -636,7 +640,8 @@ xf86libinput_init(DeviceIntPtr dev)
 	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
 		xf86libinput_init_keyboard(pInfo);
 	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER)) {
-		if (libinput_device_config_calibration_has_matrix(device))
+		if (libinput_device_config_calibration_has_matrix(device) &&
+		    !libinput_device_config_accel_is_available(device))
 			xf86libinput_init_pointer_absolute(pInfo);
 		else
 			xf86libinput_init_pointer(pInfo);
@@ -708,6 +713,13 @@ xf86libinput_handle_absmotion(InputInfoPtr pInfo, struct libinput_event_pointer 
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
 	double x, y;
+
+	if (!driver_data->has_abs) {
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Discarding absolute event from relative device. "
+			    "Please file a bug\n");
+		return;
+	}
 
 	x = libinput_event_pointer_get_absolute_x_transformed(event, TOUCH_AXIS_MAX);
 	y = libinput_event_pointer_get_absolute_y_transformed(event, TOUCH_AXIS_MAX);
