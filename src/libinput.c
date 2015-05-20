@@ -71,10 +71,12 @@ struct xf86libinput {
 	char *path;
 	struct libinput_device *device;
 
-	int scroll_vdist;
-	int scroll_hdist;
-	int scroll_vdist_remainder;
-	int scroll_hdist_remainder;
+	struct {
+		int vdist;
+		int hdist;
+		int vdist_remainder;
+		int hdist_remainder;
+	} scroll;
 
 	struct {
 		double x;
@@ -474,8 +476,8 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 			           XIGetKnownProperty(AXIS_LABEL_PROP_REL_Y),
 				   min, max, res * 1000, 0, res * 1000, Relative);
 
-	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll_hdist, 0);
-	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll_vdist, 0);
+	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.hdist, 0);
+	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.vdist, 0);
 
 	return Success;
 }
@@ -521,8 +523,8 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
 
-	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll_hdist, 0);
-	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll_vdist, 0);
+	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.hdist, 0);
+	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.vdist, 0);
 
 	return Success;
 }
@@ -768,7 +770,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	if (libinput_event_pointer_has_axis(event, axis)) {
 		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *=  driver_data->scroll_vdist;
+			value *=  driver_data->scroll.vdist;
 		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
 		}
@@ -778,7 +780,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	if (libinput_event_pointer_has_axis(event, axis)) {
 		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *=  driver_data->scroll_hdist;
+			value *=  driver_data->scroll.hdist;
 		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
 		}
@@ -1349,8 +1351,8 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	if (!driver_data->valuators)
 		goto fail;
 
-	driver_data->scroll_vdist = 15;
-	driver_data->scroll_hdist = 15;
+	driver_data->scroll.vdist = 15;
+	driver_data->scroll.hdist = 15;
 
 	path = xf86SetStrOption(pInfo->options, "Device", NULL);
 	if (!path)
