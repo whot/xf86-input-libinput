@@ -2242,9 +2242,6 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 		return;
 
 	scroll_methods = libinput_device_config_scroll_get_default_method(device);
-	if (scroll_methods == LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
-		return;
-
 	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_2FG)
 		methods[0] = TRUE;
 	if (scroll_methods & LIBINPUT_CONFIG_SCROLL_EDGE)
