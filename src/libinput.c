@@ -456,7 +456,7 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
-	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
+	for (i = BTN_JOYSTICK - 1; i >= BTN_SIDE; i--) {
 		if (libinput_device_pointer_has_button(driver_data->device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
 			break;
