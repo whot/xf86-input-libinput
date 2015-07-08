@@ -109,6 +109,12 @@ mouse is connected".
 .TP 7
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
+.TP 7
+.BI "Option \*qTappingDragLock\*q \*q" bool \*q
+Enables or disables drag lock during tapping behavior. When enabled, a
+finger up during tap-and-drag will not immediately release the button. If
+the finger is set down again within the timeout, the draging process
+continues.
 .PP
 For all options, the options are only parsed if the device supports that
 configuration option. For all options, the default value is the one used by
@@ -125,6 +131,9 @@ driver.
 .TP 7
 .BI "libinput Tapping Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables tapping
+.TP 7
+.BI "libinput Tapping Drag Lock Enabled"
+1 boolean value (8 bit, 0 or 1). 1 enables drag lock during tapping
 .TP 7
 .BI "libinput Calibration Matrix"
 9 32-bit float values, representing a 3x3 calibration matrix, order is row

@@ -30,6 +30,12 @@
 /* Tapping default enabled/disabled: BOOL, 1 value, read-only */
 #define LIBINPUT_PROP_TAP_DEFAULT "libinput Tapping Enabled Default"
 
+/* Tap drag lock enabled/disabled: BOOL, 1 value */
+#define LIBINPUT_PROP_TAP_DRAG_LOCK "libinput Tapping Drag Lock Enabled"
+
+/* Tap drag lock default enabled/disabled: BOOL, 1 value */
+#define LIBINPUT_PROP_TAP_DRAG_LOCK_DEFAULT "libinput Tapping Drag Lock Enabled Default"
+
 /* Calibration matrix: FLOAT, 9 values of a 3x3 matrix, in rows */
 #define LIBINPUT_PROP_CALIBRATION "libinput Calibration Matrix"
 

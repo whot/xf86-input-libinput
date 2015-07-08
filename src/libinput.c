@@ -98,6 +98,7 @@ struct xf86libinput {
 
 	struct options {
 		BOOL tapping;
+		BOOL tap_drag_lock;
 		BOOL natural_scrolling;
 		BOOL left_handed;
 		BOOL middle_emulation;
@@ -261,6 +262,13 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set Tapping to %d\n",
 			    driver_data->options.tapping);
+
+	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
+	    libinput_device_config_tap_set_drag_lock_enabled(device,
+							     driver_data->options.tap_drag_lock) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set Tapping DragLock to %d\n",
+			    driver_data->options.tap_drag_lock);
 
 	if (libinput_device_config_calibration_has_matrix(device) &&
 	    libinput_device_config_calibration_set_matrix(device,
@@ -1032,6 +1040,30 @@ xf86libinput_parse_tap_option(InputInfoPtr pInfo,
 	return tap;
 }
 
+static inline BOOL
+xf86libinput_parse_tap_drag_lock_option(InputInfoPtr pInfo,
+					struct libinput_device *device)
+{
+	BOOL drag_lock;
+
+	if (libinput_device_config_tap_get_finger_count(device) == 0)
+		return FALSE;
+
+	drag_lock = xf86SetBoolOption(pInfo->options,
+				      "TappingDragLock",
+				      libinput_device_config_tap_get_drag_lock_enabled(device));
+
+	if (libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock) !=
+	    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set Tapping Drag Lock to %d\n",
+			    drag_lock);
+		drag_lock = libinput_device_config_tap_get_drag_lock_enabled(device);
+	}
+
+	return drag_lock;
+}
+
 static inline double
 xf86libinput_parse_accel_option(InputInfoPtr pInfo,
 				struct libinput_device *device)
@@ -1342,6 +1374,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 
 	/* libinput options */
 	options->tapping = xf86libinput_parse_tap_option(pInfo, device);
+	options->tap_drag_lock = xf86libinput_parse_tap_drag_lock_option(pInfo, device);
 	options->speed = xf86libinput_parse_accel_option(pInfo, device);
 	options->natural_scrolling = xf86libinput_parse_natscroll_option(pInfo, device);
 	options->sendevents = xf86libinput_parse_sendevents_option(pInfo, device);
@@ -1523,6 +1556,8 @@ _X_EXPORT XF86ModuleData libinputModuleData = {
 /* libinput-specific properties */
 static Atom prop_tap;
 static Atom prop_tap_default;
+static Atom prop_tap_drag_lock;
+static Atom prop_tap_drag_lock_default;
 static Atom prop_calibration;
 static Atom prop_calibration_default;
 static Atom prop_accel;
@@ -1596,6 +1631,37 @@ LibinputSetPropertyTap(DeviceIntPtr dev,
 			return BadMatch;
 	} else {
 		driver_data->options.tapping = *data;
+	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertyTapDragLock(DeviceIntPtr dev,
+			       Atom atom,
+			       XIPropertyValuePtr val,
+			       BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->device;
+	BOOL* data;
+
+	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+	if (checkonly) {
+		if (*data != 0 && *data != 1)
+			return BadValue;
+
+		if (!xf86libinput_check_device(dev, atom))
+			return BadMatch;
+
+		if (libinput_device_config_tap_get_finger_count(device) == 0)
+			return BadMatch;
+	} else {
+		driver_data->options.tap_drag_lock = *data;
 	}
 
 	return Success;
@@ -1930,6 +1996,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 
 	if (atom == prop_tap)
 		rc = LibinputSetPropertyTap(dev, atom, val, checkonly);
+	else if (atom == prop_tap_drag_lock)
+		rc = LibinputSetPropertyTapDragLock(dev, atom, val, checkonly);
 	else if (atom == prop_calibration)
 		rc = LibinputSetPropertyCalibration(dev, atom, val,
 						    checkonly);
@@ -1957,6 +2025,7 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyMiddleEmulation(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
+		 atom == prop_tap_drag_lock_default ||
 		 atom == prop_calibration_default ||
 		 atom == prop_accel_default ||
 		 atom == prop_natural_scroll_default ||
@@ -2022,6 +2091,30 @@ LibinputInitTapProperty(DeviceIntPtr dev,
 						LIBINPUT_PROP_TAP_DEFAULT,
 						XA_INTEGER, 8,
 						1, &tap);
+}
+
+static void
+LibinputInitTapDragLockProperty(DeviceIntPtr dev,
+				struct xf86libinput *driver_data,
+				struct libinput_device *device)
+{
+	BOOL drag_lock = driver_data->options.tap_drag_lock;
+
+	if (libinput_device_config_tap_get_finger_count(device) == 0)
+		return;
+
+	prop_tap_drag_lock = LibinputMakeProperty(dev,
+						  LIBINPUT_PROP_TAP_DRAG_LOCK,
+						  XA_INTEGER, 8,
+						  1, &drag_lock);
+	if (!prop_tap_drag_lock)
+		return;
+
+	drag_lock = libinput_device_config_tap_get_default_enabled(device);
+	prop_tap_drag_lock_default = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_TAP_DRAG_LOCK_DEFAULT,
+							  XA_INTEGER, 8,
+							  1, &drag_lock);
 }
 
 static void
@@ -2383,6 +2476,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	prop_float = XIGetKnownProperty("FLOAT");
 
 	LibinputInitTapProperty(dev, driver_data, device);
+	LibinputInitTapDragLockProperty(dev, driver_data, device);
 	LibinputInitCalibrationProperty(dev, driver_data, device);
 	LibinputInitAccelProperty(dev, driver_data, device);
 	LibinputInitNaturalScrollProperty(dev, driver_data, device);
