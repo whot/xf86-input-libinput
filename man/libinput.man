@@ -44,6 +44,9 @@ are supported:
 .BI "Option \*qDevice\*q \*q" string \*q
 Specifies the device through which the device can be accessed.  This will 
 generally be of the form \*q/dev/input/eventX\*q, where X is some integer.
+When using
+.B InputClass
+directives, this option is set by the server.
 The mapping from device node to hardware is system-dependent. Property:
 "Device Node" (read-only).
 .TP 7
@@ -64,7 +67,8 @@ default mapping. See section
 for more details.
 .TP 7
 .BI "Option \*qCalibrationMatrix\*q \*q" string \*q
-A string of 9 space-separated floating point numbers.
+A string of 9 space-separated floating point numbers, in the order
+\*qa b c d e f g h i\*q.
 Sets the calibration matrix to the 3x3 matrix where the first row is (abc),
 the second row is (def) and the third row is (ghi).
 .TP 7
