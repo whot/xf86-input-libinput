@@ -924,6 +924,13 @@ xf86libinput_handle_event(struct libinput_event *event)
 						  libinput_event_get_touch_event(event),
 						  libinput_event_get_type(event));
 			break;
+		case LIBINPUT_EVENT_GESTURE_SWIPE_BEGIN:
+		case LIBINPUT_EVENT_GESTURE_SWIPE_UPDATE:
+		case LIBINPUT_EVENT_GESTURE_SWIPE_END:
+		case LIBINPUT_EVENT_GESTURE_PINCH_BEGIN:
+		case LIBINPUT_EVENT_GESTURE_PINCH_UPDATE:
+		case LIBINPUT_EVENT_GESTURE_PINCH_END:
+			break;
 	}
 }
 
