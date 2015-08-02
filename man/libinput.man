@@ -119,6 +119,10 @@ Enables or disables drag lock during tapping behavior. When enabled, a
 finger up during tap-and-drag will not immediately release the button. If
 the finger is set down again within the timeout, the draging process
 continues.
+.TP 7
+.BI "Option \*qDisableWhileTyping\*q \*q" bool \*q
+Indicates if the touchpad should be disabled while typing on the keyboard
+(this does not apply to modifier keys such as Ctrl or Alt).
 .PP
 For all options, the options are only parsed if the device supports that
 configuration option. For all options, the default value is the one used by
@@ -187,6 +191,10 @@ Indicates which click methods are enabled on this device.
 .BI "libinput Middle Emulation Enabled"
 1 boolean value (8 bit, 0 or 1). Indicates if middle emulation is enabled or
 disabled.
+.TP 7
+.BI "libinput Disable While Typing Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates if disable while typing is
+enabled or disabled.
 .TP7
 .PP
 The above properties have a
