@@ -114,4 +114,10 @@
 /* Disable while typing: BOOL, 1 value, read-only */
 #define LIBINPUT_PROP_DISABLE_WHILE_TYPING_DEFAULT "libinput Disable While Typing Enabled Default"
 
+/* Drag lock buttons, either:
+   CARD8, one value, the meta lock button, or
+   CARD8, n * 2 values, the drag lock pairs with n being the button and n+1
+   the target button number */
+#define LIBINPUT_PROP_DRAG_LOCK_BUTTONS "libinput Drag Lock Buttons"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

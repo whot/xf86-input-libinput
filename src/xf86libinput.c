@@ -1,5 +1,5 @@
 /*
- * Copyright © 2013 Red Hat, Inc.
+ * Copyright © 2013-2015 Red Hat, Inc.
  *
  * Permission to use, copy, modify, distribute, and sell this software
  * and its documentation for any purpose is hereby granted without
@@ -40,6 +40,7 @@
 
 #include <X11/Xatom.h>
 
+#include "draglock.h"
 #include "libinput-properties.h"
 
 #ifndef XI86_SERVER_FD
@@ -111,6 +112,8 @@ struct xf86libinput {
 
 		unsigned char btnmap[MAX_BUTTONS + 1];
 	} options;
+
+	struct draglock draglock;
 };
 
 /*
@@ -769,12 +772,18 @@ static void
 xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
 	int button;
 	int is_press;
 
 	button = btn_linux2xorg(libinput_event_pointer_get_button(event));
 	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
-	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
+
+	if (draglock_get_mode(&driver_data->draglock) != DRAGLOCK_DISABLED)
+		draglock_filter_button(&driver_data->draglock, &button, &is_press);
+
+	if (button)
+		xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
 }
 
 static void
@@ -1402,6 +1411,20 @@ xf86libinput_parse_buttonmap_option(InputInfoPtr pInfo,
 	free(mapping);
 }
 
+static inline void
+xf86libinput_parse_draglock_option(InputInfoPtr pInfo,
+				   struct xf86libinput *driver_data)
+{
+	char *str;
+
+	str = xf86CheckStrOption(pInfo->options, "DragLockButtons",NULL);
+	if (draglock_init_from_string(&driver_data->draglock, str) != 0)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Invalid DragLockButtons option: \"%s\"\n",
+			    str);
+	free(str);
+}
+
 static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
@@ -1427,6 +1450,8 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	xf86libinput_parse_buttonmap_option(pInfo,
 					    options->btnmap,
 					    sizeof(options->btnmap));
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
+		xf86libinput_parse_draglock_option(pInfo, driver_data);
 }
 
 static int
@@ -1619,6 +1644,9 @@ static Atom prop_middle_emulation;
 static Atom prop_middle_emulation_default;
 static Atom prop_disable_while_typing;
 static Atom prop_disable_while_typing_default;
+
+/* driver properties */
+static Atom prop_draglock;
 
 /* general properties */
 static Atom prop_float;
@@ -2059,6 +2087,85 @@ LibinputSetPropertyDisableWhileTyping(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+prop_draglock_set_meta(struct xf86libinput *driver_data,
+		       const BYTE *values,
+		       int len,
+		       BOOL checkonly)
+{
+	struct draglock *dl,
+			dummy; /* for checkonly */
+	int meta;
+
+	if (len > 1)
+		return BadImplementation; /* should not happen */
+
+	dl = (checkonly) ? &dummy : &driver_data->draglock;
+	meta = len > 0 ? values[0] : 0;
+
+	return draglock_set_meta(dl, meta) == 0 ? Success: BadValue;
+}
+
+static inline int
+prop_draglock_set_pairs(struct xf86libinput *driver_data,
+			const BYTE* pairs,
+			int len,
+			BOOL checkonly)
+{
+	struct draglock *dl,
+			dummy; /* for checkonly */
+	int data[MAX_BUTTONS + 1] = {0};
+	int i;
+	int highest = 0;
+
+	if (len >= ARRAY_SIZE(data))
+		return BadMatch;
+
+	if (len < 2 || len % 2)
+		return BadImplementation; /* should not happen */
+
+	dl = (checkonly) ? &dummy : &driver_data->draglock;
+
+	for (i = 0; i < len; i += 2) {
+		if (pairs[i] > MAX_BUTTONS)
+			return BadValue;
+
+		data[pairs[i]] = pairs[i+1];
+		highest = max(highest, pairs[i]);
+	}
+
+	return draglock_set_pairs(dl, data, highest + 1) == 0 ? Success : BadValue;
+}
+
+static inline int
+LibinputSetPropertyDragLockButtons(DeviceIntPtr dev,
+				   Atom atom,
+				   XIPropertyValuePtr val,
+				   BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+
+	if (val->format != 8 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	/* either a single value, or pairs of values */
+	if (val->size > 1 && val->size % 2)
+		return BadMatch;
+
+	if (!xf86libinput_check_device(dev, atom))
+		return BadMatch;
+
+	if (val->size <= 1)
+		return prop_draglock_set_meta(driver_data,
+					      (BYTE*)val->data,
+					      val->size, checkonly);
+	else
+		return prop_draglock_set_pairs(driver_data,
+					       (BYTE*)val->data,
+					       val->size, checkonly);
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -2096,6 +2203,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyMiddleEmulation(dev, atom, val, checkonly);
 	else if (atom == prop_disable_while_typing)
 		rc = LibinputSetPropertyDisableWhileTyping(dev, atom, val, checkonly);
+	else if (atom == prop_draglock)
+		rc = LibinputSetPropertyDragLockButtons(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_lock_default ||
@@ -2564,6 +2673,37 @@ LibinputInitDisableWhileTypingProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitDragLockProperty(DeviceIntPtr dev,
+			     struct xf86libinput *driver_data)
+{
+	size_t sz;
+	int dl_values[MAX_BUTTONS + 1];
+
+	if (!libinput_device_has_capability(driver_data->device,
+					    LIBINPUT_DEVICE_CAP_POINTER))
+		return;
+
+	switch (draglock_get_mode(&driver_data->draglock)) {
+	case DRAGLOCK_DISABLED:
+		sz = 0; /* will be an empty property */
+		break;
+	case DRAGLOCK_META:
+		dl_values[0] = draglock_get_meta(&driver_data->draglock);
+		sz = 1;
+		break;
+	case DRAGLOCK_PAIRS:
+		sz = draglock_get_pairs(&driver_data->draglock,
+					dl_values, sizeof(dl_values));
+		break;
+	}
+
+	prop_draglock = LibinputMakeProperty(dev,
+					     LIBINPUT_PROP_DRAG_LOCK_BUTTONS,
+					     XA_INTEGER, 8,
+					     sz, dl_values);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -2612,4 +2752,6 @@ LibinputInitProperty(DeviceIntPtr dev)
 		return;
 
 	XISetDevicePropertyDeletable(dev, prop_product_id, FALSE);
+
+	LibinputInitDragLockProperty(dev, driver_data);
 }

@@ -30,8 +30,10 @@ AM_CPPFLAGS =-I$(top_srcdir)/include $(LIBINPUT_CFLAGS)
 
 @DRIVER_NAME@_drv_la_LTLIBRARIES = @DRIVER_NAME@_drv.la
 @DRIVER_NAME@_drv_la_LDFLAGS = -module -avoid-version
-@DRIVER_NAME@_drv_la_LIBADD = $(LIBINPUT_LIBS)
+@DRIVER_NAME@_drv_la_LIBADD = $(LIBINPUT_LIBS) libdraglock.la
 @DRIVER_NAME@_drv_ladir = @inputdir@
 
 @DRIVER_NAME@_drv_la_SOURCES = xf86libinput.c
 
+noinst_LTLIBRARIES = libdraglock.la
+libdraglock_la_SOURCES = draglock.c draglock.h

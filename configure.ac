@@ -71,5 +71,6 @@ AC_CONFIG_FILES([Makefile
 		 include/Makefile
 		 src/Makefile
 		 man/Makefile
+		 test/Makefile
 		 xorg-libinput.pc])
 AC_OUTPUT

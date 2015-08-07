@@ -21,7 +21,7 @@
 
 DISTCHECK_CONFIGURE_FLAGS = --with-sdkdir='$${includedir}/xorg'
 
-SUBDIRS = src include man
+SUBDIRS = src include man test
 MAINTAINERCLEANFILES = ChangeLog INSTALL
 
 pkgconfigdir = $(libdir)/pkgconfig
