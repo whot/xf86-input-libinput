@@ -76,3 +76,11 @@ core
 #		Edit the following section as needed
 # For example, !report.pc overrides *.pc. See 'man gitignore'
 # 
+*.log
+*.trs
+*.swp
+*.announce
+*.sig
+test-driver
+tags
+.vimdir
