@@ -25,7 +25,6 @@
 #include "config.h"
 #endif
 
-#include <sys/epoll.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <time.h>
