@@ -1131,28 +1131,28 @@ static inline enum libinput_config_send_events_mode
 xf86libinput_parse_sendevents_option(InputInfoPtr pInfo,
 				     struct libinput_device *device)
 {
-	char *strmode;
+	char *modestr;
 	enum libinput_config_send_events_mode mode;
 
 	if (libinput_device_config_send_events_get_modes(device) == LIBINPUT_CONFIG_SEND_EVENTS_ENABLED)
 		return LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
 
 	mode = libinput_device_config_send_events_get_mode(device);
-	strmode = xf86SetStrOption(pInfo->options,
+	modestr = xf86SetStrOption(pInfo->options,
 				   "SendEventsMode",
 				   NULL);
-	if (strmode) {
-		if (strcmp(strmode, "enabled") == 0)
+	if (modestr) {
+		if (strcmp(modestr, "enabled") == 0)
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
-		else if (strcmp(strmode, "disabled") == 0)
+		else if (strcmp(modestr, "disabled") == 0)
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED;
-		else if (strcmp(strmode, "disabled-on-external-mouse") == 0)
+		else if (strcmp(modestr, "disabled-on-external-mouse") == 0)
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE;
 		else
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Invalid SendeventsMode: %s\n",
-				    strmode);
-		free(strmode);
+				    modestr);
+		free(modestr);
 	}
 
 	if (libinput_device_config_send_events_set_mode(device, mode) !=
