@@ -107,6 +107,12 @@ Enables a scroll method. Permitted values are
 Not all devices support all options, if an option is unsupported, the
 default scroll option for this device is used.
 .TP 7
+.BI "Option \*qHorizontalScrolling\*q" bool \*q
+Disables horizontal scrolling. When disabled, this driver will discard any
+horizontal scroll events from libinput. Note that this does not disable
+horizontal scrolling, it merely discards the horizontal axis from any scroll
+events.
+.TP 7
 .BI "Option \*qSendEventsMode\*q \*q" (disabled|enabled|disabled-on-external-mouse) \*q
 Sets the send events mode to disabled, enabled, or "disable when an external
 mouse is connected".
@@ -226,6 +232,10 @@ Either one 8-bit value specifying the meta drag lock button, or a list of
 button pairs. See section
 .B BUTTON DRAG LOCK
 for details.
+.TP 7
+.BI "libinput Horizontal Scrolling Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates whether horizontal scrolling
+events are enabled or not.
 
 .SH BUTTON MAPPING
 X clients receive events with logical button numbers, where 1, 2, 3

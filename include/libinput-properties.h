@@ -120,4 +120,8 @@
    the target button number */
 #define LIBINPUT_PROP_DRAG_LOCK_BUTTONS "libinput Drag Lock Buttons"
 
+/* Horizontal scroll events enabled: BOOL, 1 value (0 or 1).
+ * If disabled, horizontal scroll events are discarded */
+#define LIBINPUT_PROP_HORIZ_SCROLL_ENABLED "libinput Horizonal Scroll Enabled"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

@@ -111,6 +111,8 @@ struct xf86libinput {
 		enum libinput_config_click_method click_method;
 
 		unsigned char btnmap[MAX_BUTTONS + 1];
+
+		BOOL horiz_scrolling_enabled;
 	} options;
 
 	struct draglock draglock;
@@ -831,6 +833,10 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 		}
 		valuator_mask_set_double(mask, 3, value);
 	}
+
+	if (!driver_data->options.horiz_scrolling_enabled)
+		goto out;
+
 	axis = LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL;
 	if (libinput_event_pointer_has_axis(event, axis)) {
 		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
@@ -842,6 +848,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 		valuator_mask_set_double(mask, 2, value);
 	}
 
+out:
 	xf86PostMotionEventM(dev, Relative, mask);
 }
 
@@ -1425,6 +1432,12 @@ xf86libinput_parse_draglock_option(InputInfoPtr pInfo,
 	free(str);
 }
 
+static inline BOOL
+xf86libinput_parse_horiz_scroll_option(InputInfoPtr pInfo)
+{
+	return xf86SetBoolOption(pInfo->options, "HorizontalScrolling", TRUE);
+}
+
 static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
@@ -1450,8 +1463,10 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	xf86libinput_parse_buttonmap_option(pInfo,
 					    options->btnmap,
 					    sizeof(options->btnmap));
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER)) {
 		xf86libinput_parse_draglock_option(pInfo, driver_data);
+		options->horiz_scrolling_enabled = xf86libinput_parse_horiz_scroll_option(pInfo);
+	}
 }
 
 static int
@@ -1647,6 +1662,7 @@ static Atom prop_disable_while_typing_default;
 
 /* driver properties */
 static Atom prop_draglock;
+static Atom prop_horiz_scroll;
 
 /* general properties */
 static Atom prop_float;
@@ -2166,6 +2182,33 @@ LibinputSetPropertyDragLockButtons(DeviceIntPtr dev,
 					       val->size, checkonly);
 }
 
+static inline int
+LibinputSetPropertyHorizScroll(DeviceIntPtr dev,
+			       Atom atom,
+			       XIPropertyValuePtr val,
+			       BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	BOOL enabled;
+
+	if (val->format != 8 || val->type != XA_INTEGER || val->size != 1)
+		return BadMatch;
+
+	enabled = *(BOOL*)val->data;
+	if (checkonly) {
+		if (enabled != 0 && enabled != 1)
+			return BadValue;
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+	} else {
+		driver_data->options.horiz_scrolling_enabled = enabled;
+	}
+
+	return Success;
+ }
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -2205,6 +2248,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyDisableWhileTyping(dev, atom, val, checkonly);
 	else if (atom == prop_draglock)
 		rc = LibinputSetPropertyDragLockButtons(dev, atom, val, checkonly);
+	else if (atom == prop_horiz_scroll)
+		rc = LibinputSetPropertyHorizScroll(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_lock_default ||
@@ -2704,6 +2749,18 @@ LibinputInitDragLockProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitHorizScrollProperty(DeviceIntPtr dev,
+				struct xf86libinput *driver_data)
+{
+	BOOL enabled = driver_data->options.horiz_scrolling_enabled;
+
+	prop_horiz_scroll = LibinputMakeProperty(dev,
+						 LIBINPUT_PROP_HORIZ_SCROLL_ENABLED,
+						 XA_INTEGER, 8,
+						 1, &enabled);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -2754,4 +2811,5 @@ LibinputInitProperty(DeviceIntPtr dev)
 	XISetDevicePropertyDeletable(dev, prop_product_id, FALSE);
 
 	LibinputInitDragLockProperty(dev, driver_data);
+	LibinputInitHorizScrollProperty(dev, driver_data);
 }
