@@ -34,6 +34,7 @@
 #include <exevents.h>
 #include <xkbsrv.h>
 #include <xf86Xinput.h>
+#include <xf86_OSproc.h>
 #include <xserver-properties.h>
 #include <libinput.h>
 #include <linux/input.h>
@@ -923,7 +924,6 @@ open_restricted(const char *path, int flags, void *data)
 		char *device = xf86CheckStrOption(pInfo->options, "Device", NULL);
 
 		if (device != NULL && strcmp(path, device) == 0) {
-			fd = xf86CheckIntOption(pInfo->options, "fd", -1);
 			free(device);
 			break;
 		}
@@ -935,8 +935,7 @@ open_restricted(const char *path, int flags, void *data)
 		return -ENODEV;
 	}
 
-	if (fd == -1)
-		fd = open(path, flags);
+	fd = xf86OpenSerial(pInfo->options);
 	return fd < 0 ? -errno : fd;
 }
 
@@ -957,7 +956,7 @@ close_restricted(int fd, void *data)
 	}
 
 	if (!found)
-		close(fd);
+		xf86CloseSerial(fd);
 }
 
 const struct libinput_interface interface = {
