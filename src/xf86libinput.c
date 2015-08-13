@@ -118,78 +118,9 @@ struct xf86libinput {
 	struct draglock draglock;
 };
 
-/*
-   libinput provides a userdata for the context, but not per path device. so
-   the open_restricted call has the libinput context, but no reference to
-   the pInfo->fd that we actually need to return.
-   To avoid this, we store each path/fd combination during pre_init in the
-   context, then return that during open_restricted. If a device is added
-   twice with two different fds this may give us the wrong fd but why are
-   you doing that anyway.
- */
-struct serverfd {
-	struct xorg_list node;
-	int fd;
-	char *path;
-};
-
 static inline int
 use_server_fd(const InputInfoPtr pInfo) {
 	return pInfo->fd > -1 && (pInfo->flags & XI86_SERVER_FD);
-}
-
-static inline void
-fd_push(struct xf86libinput_driver *context,
-	int fd,
-	const char *path)
-{
-	struct serverfd *sfd = xnfcalloc(1, sizeof(*sfd));
-
-	sfd->fd = fd;
-	sfd->path = xnfstrdup(path);
-	xorg_list_add(&sfd->node, &context->server_fds);
-}
-
-static inline int
-fd_get(struct xf86libinput_driver *context,
-       const char *path)
-{
-	struct serverfd *sfd;
-
-	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
-		if (strcmp(path, sfd->path) == 0)
-			return sfd->fd;
-	}
-
-	return -1;
-}
-
-static inline void
-fd_pop(struct xf86libinput_driver *context, int fd)
-{
-	struct serverfd *sfd;
-
-	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
-		if (fd != sfd->fd)
-			continue;
-
-		xorg_list_del(&sfd->node);
-		free(sfd->path);
-		free(sfd);
-		break;
-	}
-}
-
-static inline int
-fd_find(struct xf86libinput_driver *context, int fd)
-{
-	struct serverfd *sfd;
-
-	xorg_list_for_each_entry(sfd, &context->server_fds, node) {
-		if (fd == sfd->fd)
-			return fd;
-	}
-	return -1;
 }
 
 static inline unsigned int
@@ -360,12 +291,6 @@ xf86libinput_on(DeviceIntPtr dev)
 	struct libinput *libinput = driver_context.libinput;
 	struct libinput_device *device = driver_data->device;
 
-	if (use_server_fd(pInfo)) {
-		char *path = xf86SetStrOption(pInfo->options, "Device", NULL);
-		fd_push(&driver_context, pInfo->fd, path);
-		free(path);
-	}
-
 	device = libinput_path_add_device(libinput, driver_data->path);
 	if (!device)
 		return !Success;
@@ -404,7 +329,6 @@ xf86libinput_off(DeviceIntPtr dev)
 	}
 
 	if (use_server_fd(pInfo)) {
-		fd_pop(&driver_context, pInfo->fd);
 		pInfo->fd = xf86SetIntOption(pInfo->options, "fd", -1);
 	} else {
 		pInfo->fd = -1;
@@ -981,13 +905,36 @@ xf86libinput_read_input(InputInfoPtr pInfo)
 	}
 }
 
+/*
+   libinput provides a userdata for the context, but not per path device. so
+   the open_restricted call has the libinput context, but no reference to
+   the pInfo->fd that we actually need to return.
+   The server stores the fd in the options though, so we just get it from
+   there. If a device is added twice with two different fds this may give us
+   the wrong fd but why are you doing that anyway.
+ */
 static int
 open_restricted(const char *path, int flags, void *data)
 {
-	struct xf86libinput_driver *context = data;
-	int fd;
+	InputInfoPtr pInfo;
+	int fd = -1;
 
-	fd = fd_get(context, path);
+	nt_list_for_each_entry(pInfo, xf86FirstLocalDevice(), next) {
+		char *device = xf86CheckStrOption(pInfo->options, "Device", NULL);
+
+		if (device != NULL && strcmp(path, device) == 0) {
+			fd = xf86CheckIntOption(pInfo->options, "fd", -1);
+			free(device);
+			break;
+		}
+		free(device);
+	}
+
+	if (pInfo == NULL) {
+		xf86Msg(X_ERROR, "Failed to look up path '%s'\n", path);
+		return -ENODEV;
+	}
+
 	if (fd == -1)
 		fd = open(path, flags);
 	return fd < 0 ? -errno : fd;
@@ -996,9 +943,20 @@ open_restricted(const char *path, int flags, void *data)
 static void
 close_restricted(int fd, void *data)
 {
-	struct xf86libinput_driver *context = data;
+	InputInfoPtr pInfo;
+	int server_fd = -1;
+	BOOL found = FALSE;
 
-	if (fd_find(context, fd) == -1)
+	nt_list_for_each_entry(pInfo, xf86FirstLocalDevice(), next) {
+		server_fd = xf86CheckIntOption(pInfo->options, "fd", -1);
+
+		if (server_fd == fd) {
+			found = TRUE;
+			break;
+		}
+	}
+
+	if (!found)
 		close(fd);
 }
 
@@ -1523,9 +1481,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 		goto fail;
 	}
 
-	if (use_server_fd(pInfo))
-		fd_push(&driver_context, pInfo->fd, path);
-
 	device = libinput_path_add_device(libinput, path);
 	if (!device) {
 		xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
@@ -1537,8 +1492,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	  */
 	libinput_device_ref(device);
 	libinput_path_remove_device(device);
-	if (use_server_fd(pInfo))
-	    fd_pop(&driver_context, pInfo->fd);
 
 	pInfo->private = driver_data;
 	driver_data->path = path;
@@ -1564,8 +1517,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 
 	return Success;
 fail:
-	if (use_server_fd(pInfo) && driver_context.libinput != NULL)
-		fd_pop(&driver_context, pInfo->fd);
 	if (driver_data->valuators)
 		valuator_mask_free(&driver_data->valuators);
 	if (driver_data->valuators_unaccelerated)
