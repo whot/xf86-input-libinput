@@ -48,6 +48,18 @@
 /* Pointer accel speed: FLOAT, 1 value, 32 bit, read-only*/
 #define LIBINPUT_PROP_ACCEL_DEFAULT "libinput Accel Speed Default"
 
+/* Pointer accel profile: BOOL, 2 values in oder adaptive, flat,
+ * only one is enabled at a time at max, read-only */
+#define LIBINPUT_PROP_ACCEL_PROFILES_AVAILABLE "libinput Accel Profiles Available"
+
+/* Pointer accel profile: BOOL, 2 values in order adaptive, flat,
+   only one is enabled at a time at max, read-only */
+#define LIBINPUT_PROP_ACCEL_PROFILE_ENABLED_DEFAULT "libinput Accel Profile Enabled Default"
+
+/* Pointer accel profile: BOOL, 2 values in order adaptive, flat,
+   only one is enabled at a time at max */
+#define LIBINPUT_PROP_ACCEL_PROFILE_ENABLED "libinput Accel Profile Enabled"
+
 /* Natural scrolling: BOOL, 1 value */
 #define LIBINPUT_PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
 

@@ -50,6 +50,15 @@ directives, this option is set by the server.
 The mapping from device node to hardware is system-dependent. Property:
 "Device Node" (read-only).
 .TP 7
+.BI "Option \*qAccelProfile\*q \*q" string \*q
+Sets the pointer acceleration profile to the given profile. Permitted values
+are
+.BI adaptive,
+.BI flat.
+Not all devices support this option or all profiles. If a profile is
+unsupported, the default profile for this is used. For a description on the
+profiles and their behavior, see the libinput documentation.
+.TP 7
 .BI "Option \*qAccelSpeed\*q \*q" float \*q
 Sets the pointer acceleration speed within the range [-1, 1]
 .TP 7
