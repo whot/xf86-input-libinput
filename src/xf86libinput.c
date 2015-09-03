@@ -2480,7 +2480,7 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 							     LIBINPUT_PROP_SCROLL_METHODS_AVAILABLE,
 							     XA_INTEGER, 8,
 							     ARRAY_SIZE(methods),
-							     &methods);
+							     methods);
 	if (!prop_scroll_methods_available)
 		return;
 
@@ -2505,7 +2505,7 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 							  LIBINPUT_PROP_SCROLL_METHOD_ENABLED,
 							  XA_INTEGER, 8,
 							  ARRAY_SIZE(methods),
-							  &methods);
+							  methods);
 	if (!prop_scroll_method_enabled)
 		return;
 
@@ -2521,7 +2521,7 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 							  LIBINPUT_PROP_SCROLL_METHOD_ENABLED_DEFAULT,
 							  XA_INTEGER, 8,
 							  ARRAY_SIZE(methods),
-							  &methods);
+							  methods);
 	/* Scroll button */
 	if (libinput_device_config_scroll_get_methods(device) &
 	    LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
@@ -2564,7 +2564,7 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 							    LIBINPUT_PROP_CLICK_METHODS_AVAILABLE,
 							    XA_INTEGER, 8,
 							    ARRAY_SIZE(methods),
-							    &methods);
+							    methods);
 	if (!prop_click_methods_available)
 		return;
 
@@ -2586,7 +2586,7 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 							 LIBINPUT_PROP_CLICK_METHOD_ENABLED,
 							 XA_INTEGER, 8,
 							 ARRAY_SIZE(methods),
-							 &methods);
+							 methods);
 
 	if (!prop_click_method_enabled)
 		return;
@@ -2609,7 +2609,7 @@ LibinputInitClickMethodsProperty(DeviceIntPtr dev,
 							 LIBINPUT_PROP_CLICK_METHOD_ENABLED_DEFAULT,
 							 XA_INTEGER, 8,
 							 ARRAY_SIZE(methods),
-							 &methods);
+							 methods);
 }
 
 static void
