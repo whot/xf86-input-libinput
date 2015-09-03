@@ -2176,20 +2176,14 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyAccel(dev, atom, val, checkonly);
 	else if (atom == prop_natural_scroll)
 		rc = LibinputSetPropertyNaturalScroll(dev, atom, val, checkonly);
-	else if (atom == prop_sendevents_available)
-		return BadAccess; /* read-only */
 	else if (atom == prop_sendevents_enabled)
 		rc = LibinputSetPropertySendEvents(dev, atom, val, checkonly);
 	else if (atom == prop_left_handed)
 		rc = LibinputSetPropertyLeftHanded(dev, atom, val, checkonly);
-	else if (atom == prop_scroll_methods_available)
-		return BadAccess; /* read-only */
 	else if (atom == prop_scroll_method_enabled)
 		rc = LibinputSetPropertyScrollMethods(dev, atom, val, checkonly);
 	else if (atom == prop_scroll_button)
 		rc = LibinputSetPropertyScrollButton(dev, atom, val, checkonly);
-	else if (atom == prop_click_methods_available)
-		return BadAccess; /* read-only */
 	else if (atom == prop_click_method_enabled)
 		rc = LibinputSetPropertyClickMethod(dev, atom, val, checkonly);
 	else if (atom == prop_middle_emulation)
@@ -2207,10 +2201,13 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		 atom == prop_accel_default ||
 		 atom == prop_natural_scroll_default ||
 		 atom == prop_sendevents_default ||
+		 atom == prop_sendevents_available ||
 		 atom == prop_left_handed_default ||
 		 atom == prop_scroll_method_default ||
+		 atom == prop_scroll_methods_available ||
 		 atom == prop_scroll_button_default ||
 		 atom == prop_click_method_default ||
+		 atom == prop_click_methods_available ||
 		 atom == prop_middle_emulation_default ||
 		 atom == prop_disable_while_typing_default)
 		return BadAccess; /* read-only */
