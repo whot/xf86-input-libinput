@@ -37,4 +37,4 @@ ChangeLog:
 
 dist-hook: ChangeLog INSTALL
 
-EXTRA_DIST = conf/99-libinput.conf README.md
+EXTRA_DIST = conf/90-libinput.conf README.md
