@@ -66,6 +66,10 @@
  */
 #define TOUCH_AXIS_MAX 0xffff
 
+#define CAP_KEYBOARD	0x1
+#define CAP_POINTER	0x2
+#define CAP_TOUCH	0x4
+
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_enabled_count;
@@ -76,6 +80,7 @@ static struct xf86libinput_driver driver_context;
 struct xf86libinput {
 	char *path;
 	struct libinput_device *device;
+	uint32_t capabilities;
 
 	struct {
 		int vdist;
@@ -611,16 +616,16 @@ xf86libinput_init(DeviceIntPtr dev)
 
 	dev->public.on = FALSE;
 
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
+	if (driver_data->capabilities & CAP_KEYBOARD)
 		xf86libinput_init_keyboard(pInfo);
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER)) {
+	if (driver_data->capabilities & CAP_POINTER) {
 		if (libinput_device_config_calibration_has_matrix(device) &&
 		    !libinput_device_config_accel_is_available(device))
 			xf86libinput_init_pointer_absolute(pInfo);
 		else
 			xf86libinput_init_pointer(pInfo);
 	}
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
+	if (driver_data->capabilities & CAP_TOUCH)
 		xf86libinput_init_touch(pInfo);
 
 	LibinputApplyConfig(dev);
@@ -1475,25 +1480,24 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	xf86libinput_parse_buttonmap_option(pInfo,
 					    options->btnmap,
 					    sizeof(options->btnmap));
-	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER)) {
+	if (driver_data->capabilities & CAP_POINTER) {
 		xf86libinput_parse_draglock_option(pInfo, driver_data);
 		options->horiz_scrolling_enabled = xf86libinput_parse_horiz_scroll_option(pInfo);
 	}
 }
 
 static const char*
-xf86libinput_get_type_name(struct libinput_device *device)
+xf86libinput_get_type_name(struct libinput_device *device,
+			   struct xf86libinput *driver_data)
 {
 	const char *type_name;
 
 	/* now pick an actual type */
 	if (libinput_device_config_tap_get_finger_count(device) > 0)
 		type_name = XI_TOUCHPAD;
-	else if (libinput_device_has_capability(device,
-						LIBINPUT_DEVICE_CAP_TOUCH))
+	else if (driver_data->capabilities & CAP_TOUCH)
 		type_name = XI_TOUCHSCREEN;
-	else if (libinput_device_has_capability(device,
-						LIBINPUT_DEVICE_CAP_POINTER))
+	else if (driver_data->capabilities & CAP_POINTER)
 		type_name = XI_MOUSE;
 	else
 		type_name = XI_KEYBOARD;
@@ -1570,13 +1574,20 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	driver_data->path = path;
 	driver_data->device = device;
 
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
+		driver_data->capabilities |= CAP_POINTER;
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
+		driver_data->capabilities |= CAP_KEYBOARD;
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
+		driver_data->capabilities |= CAP_TOUCH;
+
 	/* Disable acceleration in the server, libinput does it for us */
 	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
 	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
 
 	xf86libinput_parse_options(pInfo, driver_data, device);
 
-	pInfo->type_name = xf86libinput_get_type_name(device);
+	pInfo->type_name = xf86libinput_get_type_name(device, driver_data);
 
 	return Success;
 fail:
@@ -2850,8 +2861,7 @@ LibinputInitDragLockProperty(DeviceIntPtr dev,
 	size_t sz;
 	int dl_values[MAX_BUTTONS + 1];
 
-	if (!libinput_device_has_capability(driver_data->device,
-					    LIBINPUT_DEVICE_CAP_POINTER))
+	if ((driver_data->capabilities & CAP_POINTER) == 0)
 		return;
 
 	switch (draglock_get_mode(&driver_data->draglock)) {
