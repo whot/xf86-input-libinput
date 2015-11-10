@@ -1481,6 +1481,26 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	}
 }
 
+static const char*
+xf86libinput_get_type_name(struct libinput_device *device)
+{
+	const char *type_name;
+
+	/* now pick an actual type */
+	if (libinput_device_config_tap_get_finger_count(device) > 0)
+		type_name = XI_TOUCHPAD;
+	else if (libinput_device_has_capability(device,
+						LIBINPUT_DEVICE_CAP_TOUCH))
+		type_name = XI_TOUCHSCREEN;
+	else if (libinput_device_has_capability(device,
+						LIBINPUT_DEVICE_CAP_POINTER))
+		type_name = XI_MOUSE;
+	else
+		type_name = XI_KEYBOARD;
+
+	return type_name;
+}
+
 static int
 xf86libinput_pre_init(InputDriverPtr drv,
 		      InputInfoPtr pInfo,
@@ -1556,17 +1576,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 
 	xf86libinput_parse_options(pInfo, driver_data, device);
 
-	/* now pick an actual type */
-	if (libinput_device_config_tap_get_finger_count(device) > 0)
-		pInfo->type_name = XI_TOUCHPAD;
-	else if (libinput_device_has_capability(device,
-						LIBINPUT_DEVICE_CAP_TOUCH))
-		pInfo->type_name = XI_TOUCHSCREEN;
-	else if (libinput_device_has_capability(device,
-						LIBINPUT_DEVICE_CAP_POINTER))
-		pInfo->type_name = XI_MOUSE;
-	else
-		pInfo->type_name = XI_KEYBOARD;
+	pInfo->type_name = xf86libinput_get_type_name(device);
 
 	return Success;
 fail:
