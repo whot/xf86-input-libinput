@@ -1122,6 +1122,8 @@ xf86libinput_parse_accel_profile_option(InputInfoPtr pInfo,
 		profile = libinput_device_config_accel_get_profile(device);
 	}
 
+	free(str);
+
 	return profile;
 }
 
@@ -1586,6 +1588,7 @@ xf86libinput_uninit(InputDriverPtr drv,
 	if (driver_data) {
 		driver_context.libinput = libinput_unref(driver_context.libinput);
 		valuator_mask_free(&driver_data->valuators);
+		valuator_mask_free(&driver_data->valuators_unaccelerated);
 		free(driver_data->path);
 		free(driver_data);
 		pInfo->private = NULL;
