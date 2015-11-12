@@ -1505,6 +1505,21 @@ xf86libinput_get_type_name(struct libinput_device *device,
 	return type_name;
 }
 
+static void
+xf86libinput_init_driver_context(void)
+{
+	if (!driver_context.libinput) {
+		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
+		libinput_log_set_handler(driver_context.libinput,
+					 xf86libinput_log_handler);
+		/* we want all msgs, let the server filter */
+		libinput_log_set_priority(driver_context.libinput,
+					  LIBINPUT_LOG_PRIORITY_DEBUG);
+	} else {
+		libinput_ref(driver_context.libinput);
+	}
+}
+
 static int
 xf86libinput_pre_init(InputDriverPtr drv,
 		      InputInfoPtr pInfo,
@@ -1540,17 +1555,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	if (!path)
 		goto fail;
 
-	if (!driver_context.libinput) {
-		driver_context.libinput = libinput_path_create_context(&interface, &driver_context);
-		libinput_log_set_handler(driver_context.libinput,
-					 xf86libinput_log_handler);
-		/* we want all msgs, let the server filter */
-		libinput_log_set_priority(driver_context.libinput,
-					  LIBINPUT_LOG_PRIORITY_DEBUG);
-	} else {
-		libinput_ref(driver_context.libinput);
-	}
-
+	xf86libinput_init_driver_context();
 	libinput = driver_context.libinput;
 
 	if (libinput == NULL) {
