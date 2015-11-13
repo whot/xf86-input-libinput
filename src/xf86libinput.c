@@ -69,7 +69,6 @@
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_enabled_count;
-	struct xorg_list server_fds;
 };
 
 static struct xf86libinput_driver driver_context;
@@ -1523,7 +1522,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 		/* we want all msgs, let the server filter */
 		libinput_log_set_priority(driver_context.libinput,
 					  LIBINPUT_LOG_PRIORITY_DEBUG);
-		xorg_list_init(&driver_context.server_fds);
 	} else {
 		libinput_ref(driver_context.libinput);
 	}
