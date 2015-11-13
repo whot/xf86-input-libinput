@@ -631,6 +631,7 @@ xf86libinput_init(DeviceIntPtr dev)
 	/* unref the device now, because we'll get a new ref during
 	   DEVICE_ON */
 	libinput_device_unref(device);
+	driver_data->device = NULL;
 
 	return 0;
 }
