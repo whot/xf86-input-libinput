@@ -657,6 +657,7 @@ xf86libinput_device_control(DeviceIntPtr dev, int mode)
 			break;
 		case DEVICE_CLOSE:
 			xf86libinput_destroy(dev);
+			rc = Success;
 			break;
 	}
 
