@@ -1576,6 +1576,8 @@ fail:
 		valuator_mask_free(&driver_data->valuators_unaccelerated);
 	free(path);
 	free(driver_data);
+	if (libinput)
+		driver_context.libinput = libinput_unref(libinput);
 	return BadValue;
 }
 
