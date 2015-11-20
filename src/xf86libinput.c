@@ -77,17 +77,9 @@ struct xf86libinput_driver {
 
 static struct xf86libinput_driver driver_context;
 
-struct xf86libinput_device {
-	int refcount;
-	int enabled_count;
-	uint32_t id;
-	struct libinput_device *device;
-	struct xorg_list device_list;
-};
-
 struct xf86libinput {
-	InputInfoPtr pInfo;
 	char *path;
+	struct libinput_device *device;
 	uint32_t capabilities;
 
 	struct {
@@ -130,9 +122,6 @@ struct xf86libinput {
 	} options;
 
 	struct draglock draglock;
-
-	struct xf86libinput_device *shared_device;
-	struct xorg_list shared_device_link;
 };
 
 static inline int
@@ -175,112 +164,6 @@ btn_xorg2linux(unsigned int b)
 	return button;
 }
 
-static inline InputInfoPtr
-xf86libinput_get_parent(InputInfoPtr pInfo)
-{
-	InputInfoPtr parent;
-	int parent_id;
-
-	parent_id = xf86CheckIntOption(pInfo->options, "_libinput/shared-device", -1);
-	if (parent_id == -1)
-		return NULL;
-
-	nt_list_for_each_entry(parent, xf86FirstLocalDevice(), next) {
-		int id = xf86CheckIntOption(parent->options,
-					    "_libinput/shared-device",
-					    -1);
-		if (id == parent_id)
-			return parent;
-	}
-
-	return NULL;
-}
-
-static inline struct xf86libinput_device*
-xf86libinput_shared_create(struct libinput_device *device)
-{
-	static uint32_t next_shared_device_id;
-	struct xf86libinput_device *shared_device;
-
-	shared_device = calloc(1, sizeof(*shared_device));
-	if (!shared_device)
-		return NULL;
-
-	shared_device->device = device;
-	shared_device->refcount = 1;
-	shared_device->id = ++next_shared_device_id;
-	xorg_list_init(&shared_device->device_list);
-
-	return shared_device;
-}
-
-static inline struct xf86libinput_device*
-xf86libinput_shared_ref(struct xf86libinput_device *shared_device)
-{
-	shared_device->refcount++;
-
-	return shared_device;
-}
-
-static inline struct xf86libinput_device*
-xf86libinput_shared_unref(struct xf86libinput_device *shared_device)
-{
-	shared_device->refcount--;
-
-	if (shared_device->refcount > 0)
-		return shared_device;
-
-	free(shared_device);
-
-	return NULL;
-}
-
-static inline struct libinput_device *
-xf86libinput_shared_enable(struct xf86libinput_device *shared_device,
-			   const char *path)
-{
-	struct libinput_device *device;
-	struct libinput *libinput = driver_context.libinput;
-
-	shared_device->enabled_count++;
-	if (shared_device->enabled_count > 1)
-		return shared_device->device;
-
-	device = libinput_path_add_device(libinput, path);
-	if (!device)
-		return NULL;
-
-	libinput_device_set_user_data(device, shared_device);
-	shared_device->device = libinput_device_ref(device);
-
-	return device;
-}
-
-static inline void
-xf86libinput_shared_disable(struct xf86libinput_device *shared_device)
-{
-	struct libinput_device *device = shared_device->device;
-
-	shared_device->enabled_count--;
-
-	if (shared_device->enabled_count > 0)
-		return;
-
-	if (!device)
-		return;
-
-	libinput_device_set_user_data(device, NULL);
-	libinput_path_remove_device(device);
-	device = libinput_device_unref(device);
-	shared_device->device = NULL;
-}
-
-static inline bool
-xf86libinput_shared_is_enabled(struct xf86libinput_device *shared_device)
-{
-	return shared_device->enabled_count > 0;
-}
-
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly);
@@ -292,7 +175,7 @@ LibinputApplyConfig(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	unsigned int scroll_button;
 
 	if (libinput_device_config_send_events_get_modes(device) != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED &&
@@ -433,14 +316,16 @@ xf86libinput_on(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct xf86libinput_device *shared_device = driver_data->shared_device;
 	struct libinput *libinput = driver_context.libinput;
-	struct libinput_device *device;
+	struct libinput_device *device = driver_data->device;
 
-	device = xf86libinput_shared_enable(shared_device,
-					    driver_data->path);
+	device = libinput_path_add_device(libinput, driver_data->path);
 	if (!device)
 		return !Success;
+
+	libinput_device_ref(device);
+	libinput_device_set_user_data(device, pInfo);
+	driver_data->device = device;
 
 	/* if we use server fds, overwrite the fd with the one from
 	   libinput nonetheless, otherwise the server won't call ReadInput
@@ -466,7 +351,6 @@ xf86libinput_off(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct xf86libinput_device *shared_device = driver_data->shared_device;
 
 	if (--driver_context.device_enabled_count == 0) {
 		RemoveEnabledDevice(pInfo->fd);
@@ -480,7 +364,10 @@ xf86libinput_off(DeviceIntPtr dev)
 
 	dev->public.on = FALSE;
 
-	xf86libinput_shared_disable(shared_device);
+	libinput_device_set_user_data(driver_data->device, NULL);
+	libinput_path_remove_device(driver_data->device);
+	libinput_device_unref(driver_data->device);
+	driver_data->device = NULL;
 
 	return Success;
 }
@@ -534,7 +421,6 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev= pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
 	int min, max, res;
 	int nbuttons = 7;
 	int i;
@@ -543,7 +429,7 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
 	for (i = BTN_JOYSTICK - 1; i >= BTN_SIDE; i--) {
-		if (libinput_device_pointer_has_button(device, i)) {
+		if (libinput_device_pointer_has_button(driver_data->device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
 			break;
 		}
@@ -582,7 +468,6 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev= pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
 	int min, max, res;
 	int nbuttons = 7;
 	int i;
@@ -591,7 +476,7 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
 	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
-		if (libinput_device_pointer_has_button(device, i)) {
+		if (libinput_device_pointer_has_button(driver_data->device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
 			break;
 		}
@@ -643,7 +528,7 @@ xf86libinput_kbd_ctrl(DeviceIntPtr device, KeybdCtrl *ctrl)
     enum libinput_led leds = 0;
     InputInfoPtr pInfo = device->public.devicePrivate;
     struct xf86libinput *driver_data = pInfo->private;
-    struct libinput_device *ldevice = driver_data->shared_device->device;
+    struct libinput_device *ldevice = driver_data->device;
 
     while (bits[i].xbit) {
 	    if (ctrl->leds & bits[i].xbit)
@@ -727,10 +612,7 @@ xf86libinput_init(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct xf86libinput_device *shared_device = driver_data->shared_device;
-	struct libinput_device *device = shared_device->device;
-
-	BUG_RETURN_VAL(device == NULL, !Success);
+	struct libinput_device *device = driver_data->device;
 
 	dev->public.on = FALSE;
 
@@ -750,14 +632,10 @@ xf86libinput_init(DeviceIntPtr dev)
 	LibinputInitProperty(dev);
 	XIRegisterPropertyHandler(dev, LibinputSetProperty, NULL, NULL);
 
-	/* If we have a device but it's not yet enabled it's the
-	 * already-removed device from PreInit. Drop the ref to clean up,
-	 * we'll get a new libinput_device during DEVICE_ON when we re-add
-	 * it. */
-	if (!xf86libinput_shared_is_enabled(shared_device)) {
-		libinput_device_unref(device);
-		shared_device->device = NULL;
-	}
+	/* unref the device now, because we'll get a new ref during
+	   DEVICE_ON */
+	libinput_device_unref(device);
+	driver_data->device = NULL;
 
 	return 0;
 }
@@ -765,13 +643,6 @@ xf86libinput_init(DeviceIntPtr dev)
 static void
 xf86libinput_destroy(DeviceIntPtr dev)
 {
-	InputInfoPtr pInfo = dev->public.devicePrivate;
-	struct xf86libinput *driver_data = pInfo->private;
-	struct xf86libinput_device *shared_device = driver_data->shared_device;
-
-	xorg_list_del(&driver_data->shared_device_link);
-
-	xf86libinput_shared_unref(shared_device);
 }
 
 static int
@@ -805,9 +676,6 @@ xf86libinput_handle_motion(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
 	double x, y;
-
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
-		return;
 
 	x = libinput_event_pointer_get_dx(event);
 	y = libinput_event_pointer_get_dy(event);
@@ -846,9 +714,6 @@ xf86libinput_handle_absmotion(InputInfoPtr pInfo, struct libinput_event_pointer 
 		return;
 	}
 
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
-		return;
-
 	x = libinput_event_pointer_get_absolute_x_transformed(event, TOUCH_AXIS_MAX);
 	y = libinput_event_pointer_get_absolute_y_transformed(event, TOUCH_AXIS_MAX);
 
@@ -867,9 +732,6 @@ xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	int button;
 	int is_press;
 
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
-		return;
-
 	button = btn_linux2xorg(libinput_event_pointer_get_button(event));
 	is_press = (libinput_event_pointer_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
 
@@ -884,12 +746,8 @@ static void
 xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
-	struct xf86libinput *driver_data = pInfo->private;
 	int is_press;
 	int key = libinput_event_keyboard_get_key(event);
-
-	if ((driver_data->capabilities & CAP_KEYBOARD) == 0)
-		return;
 
 	key += XORG_KEYCODE_OFFSET;
 
@@ -906,9 +764,6 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	double value;
 	enum libinput_pointer_axis axis;
 	enum libinput_pointer_axis_source source;
-
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
-		return;
 
 	valuator_mask_zero(mask);
 
@@ -968,9 +823,6 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 	static unsigned int next_touchid;
 	static unsigned int touchids[TOUCH_MAX_SLOTS] = {0};
 
-	if ((driver_data->capabilities & CAP_TOUCH) == 0)
-		return;
-
 	slot = libinput_event_touch_get_slot(event);
 
 	switch (event_type) {
@@ -1001,50 +853,19 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 	xf86PostTouchEvent(dev, touchids[slot], type, 0, m);
 }
 
-static InputInfoPtr
-xf86libinput_pick_device(struct xf86libinput_device *shared_device,
-			 enum libinput_event_type type)
-{
-	struct xf86libinput *driver_data;
-	uint32_t needed_cap;
-
-	if (shared_device == NULL)
-		return NULL;
-
-	switch(type) {
-	case LIBINPUT_EVENT_KEYBOARD_KEY:
-		needed_cap = CAP_KEYBOARD;
-		break;
-	default:
-		needed_cap = ~CAP_KEYBOARD;
-		break;
-	}
-
-	xorg_list_for_each_entry(driver_data,
-				 &shared_device->device_list,
-				 shared_device_link) {
-		if (driver_data->capabilities & needed_cap)
-			return driver_data->pInfo;
-	}
-
-	return NULL;
-}
-
 static void
 xf86libinput_handle_event(struct libinput_event *event)
 {
 	struct libinput_device *device;
-	enum libinput_event_type type;
 	InputInfoPtr pInfo;
 
-	type = libinput_event_get_type(event);
 	device = libinput_event_get_device(event);
-	pInfo = xf86libinput_pick_device(libinput_device_get_user_data(device), type);
+	pInfo = libinput_device_get_user_data(device);
 
 	if (!pInfo || !pInfo->dev->public.on)
 		return;
 
-	switch (type) {
+	switch (libinput_event_get_type(event)) {
 		case LIBINPUT_EVENT_NONE:
 		case LIBINPUT_EVENT_DEVICE_ADDED:
 		case LIBINPUT_EVENT_DEVICE_REMOVED:
@@ -1699,91 +1520,15 @@ xf86libinput_init_driver_context(void)
 	}
 }
 
-struct xf86libinput_hotplug_info {
-	InputAttributes *attrs;
-	InputOption *input_options;
-};
-
-static Bool
-xf86libinput_hotplug_device(ClientPtr client, pointer closure)
-{
-	struct xf86libinput_hotplug_info *hotplug = closure;
-	DeviceIntPtr unused;
-
-	NewInputDeviceRequest(hotplug->input_options,
-			      hotplug->attrs,
-			      &unused);
-
-	input_option_free_list(&hotplug->input_options);
-	FreeInputAttributes(hotplug->attrs);
-	free(hotplug);
-
-	return TRUE;
-}
-
-static void
-xf86libinput_create_keyboard_subdevice(InputInfoPtr pInfo)
-{
-	struct xf86libinput *driver_data = pInfo->private;
-	struct xf86libinput_device *shared_device;
-	struct xf86libinput_hotplug_info *hotplug;
-	InputOption *iopts = NULL;
-	XF86OptionPtr options, o;
-
-	shared_device = driver_data->shared_device;
-	pInfo->options = xf86ReplaceIntOption(pInfo->options,
-					      "_libinput/shared-device",
-					      shared_device->id);
-
-	options = xf86OptionListDuplicate(pInfo->options);
-	options = xf86ReplaceStrOption(options, "_source", "_driver/libinput");
-	options = xf86ReplaceStrOption(options, "_libinput/caps", "keyboard");
-
-	/* need convert from one option list to the other. woohoo. */
-	o = options;
-	while (o) {
-		iopts = input_option_new(iopts,
-					 xf86OptionName(o),
-					 xf86OptionValue(o));
-		o = xf86NextOption(o);
-	}
-	xf86OptionListFree(options);
-
-	hotplug = calloc(1, sizeof(*hotplug));
-	if (!hotplug)
-		return;
-
-	hotplug->input_options = iopts;
-	hotplug->attrs = DuplicateInputAttributes(pInfo->attrs);
-
-	xf86IDrvMsg(pInfo, X_INFO, "needs a virtual subdevice\n");
-	QueueWorkProc(xf86libinput_hotplug_device, serverClient, hotplug);
-}
-
-static BOOL
-xf86libinput_is_subdevice(InputInfoPtr pInfo)
-{
-	char *source;
-	BOOL is_subdevice;
-
-	source = xf86SetStrOption(pInfo->options, "_source", "");
-	is_subdevice = strcmp(source, "_driver/libinput") == 0;
-	free(source);
-
-	return is_subdevice;
-}
-
 static int
 xf86libinput_pre_init(InputDriverPtr drv,
 		      InputInfoPtr pInfo,
 		      int flags)
 {
 	struct xf86libinput *driver_data = NULL;
-	struct xf86libinput_device *shared_device = NULL;
-	struct libinput *libinput = NULL;
+        struct libinput *libinput = NULL;
 	struct libinput_device *device;
 	char *path = NULL;
-	bool is_subdevice;
 
 	pInfo->type_name = 0;
 	pInfo->device_control = xf86libinput_device_control;
@@ -1803,6 +1548,9 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	if (!driver_data->valuators_unaccelerated)
 		goto fail;
 
+	driver_data->scroll.vdist = 15;
+	driver_data->scroll.hdist = 15;
+
 	path = xf86SetStrOption(pInfo->options, "Device", NULL);
 	if (!path)
 		goto fail;
@@ -1815,75 +1563,34 @@ xf86libinput_pre_init(InputDriverPtr drv,
 		goto fail;
 	}
 
-	is_subdevice = xf86libinput_is_subdevice(pInfo);
-	if (!is_subdevice) {
-		device = libinput_path_add_device(libinput, path);
-		if (!device) {
-			xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
-			goto fail;
-		}
-
-		/* We ref the device above, then remove it. It get's
-		   re-added with the same path in DEVICE_ON, we hope
-		   it doesn't change until then */
-		libinput_device_ref(device);
-		libinput_path_remove_device(device);
-
-		shared_device = xf86libinput_shared_create(device);
-		if (!shared_device) {
-			libinput_device_unref(device);
-			goto fail;
-		}
-	} else {
-		InputInfoPtr parent;
-		struct xf86libinput *parent_driver_data;
-
-		parent = xf86libinput_get_parent(pInfo);
-		if (!parent) {
-			xf86IDrvMsg(pInfo, X_ERROR, "Failed to find parent device\n");
-			goto fail;
-		}
-		xf86IDrvMsg(pInfo, X_INFO, "is a virtual subdevice\n");
-
-		parent_driver_data = parent->private;
-		shared_device = xf86libinput_shared_ref(parent_driver_data->shared_device);
-		device = shared_device->device;
+	device = libinput_path_add_device(libinput, path);
+	if (!device) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
+		goto fail;
 	}
+
+	/* We ref the device but remove it afterwards. The hope is that
+	   between now and DEVICE_INIT/DEVICE_ON, the device doesn't change.
+	  */
+	libinput_device_ref(device);
+	libinput_path_remove_device(device);
 
 	pInfo->private = driver_data;
-	driver_data->pInfo = pInfo;
-	driver_data->scroll.vdist = 15;
-	driver_data->scroll.hdist = 15;
 	driver_data->path = path;
-	driver_data->shared_device = shared_device;
-	xorg_list_append(&driver_data->shared_device_link,
-			 &shared_device->device_list);
+	driver_data->device = device;
 
-	if (!is_subdevice) {
-		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
-			driver_data->capabilities |= CAP_POINTER;
-		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
-			driver_data->capabilities |= CAP_KEYBOARD;
-		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
-			driver_data->capabilities |= CAP_TOUCH;
-	} else {
-		driver_data->capabilities = CAP_KEYBOARD;
-	}
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
+		driver_data->capabilities |= CAP_POINTER;
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
+		driver_data->capabilities |= CAP_KEYBOARD;
+	if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
+		driver_data->capabilities |= CAP_TOUCH;
 
 	/* Disable acceleration in the server, libinput does it for us */
 	pInfo->options = xf86ReplaceIntOption(pInfo->options, "AccelerationProfile", -1);
 	pInfo->options = xf86ReplaceStrOption(pInfo->options, "AccelerationScheme", "none");
 
 	xf86libinput_parse_options(pInfo, driver_data, device);
-
-	/* Device is both keyboard and pointer. Drop the keyboard cap from
-	 * this device, create a separate device instead */
-	if (!is_subdevice &&
-	    driver_data->capabilities & CAP_KEYBOARD &&
-	    driver_data->capabilities & (CAP_POINTER|CAP_TOUCH)) {
-		driver_data->capabilities &= ~CAP_KEYBOARD;
-		xf86libinput_create_keyboard_subdevice(pInfo);
-	}
 
 	pInfo->type_name = xf86libinput_get_type_name(device, driver_data);
 
@@ -1894,8 +1601,6 @@ fail:
 	if (driver_data->valuators_unaccelerated)
 		valuator_mask_free(&driver_data->valuators_unaccelerated);
 	free(path);
-	if (shared_device)
-		xf86libinput_shared_unref(shared_device);
 	free(driver_data);
 	if (libinput)
 		driver_context.libinput = libinput_unref(libinput);
@@ -2006,7 +1711,7 @@ xf86libinput_check_device (DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 
 	if (device == NULL) {
 		BUG_WARN(dev->public.on);
@@ -2028,7 +1733,7 @@ LibinputSetPropertyTap(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -2059,7 +1764,7 @@ LibinputSetPropertyTapDragLock(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -2090,7 +1795,7 @@ LibinputSetPropertyCalibration(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	float* data;
 
 	if (val->format != 32 || val->size != 9 || val->type != prop_float)
@@ -2126,7 +1831,7 @@ LibinputSetPropertyAccel(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	float* data;
 
 	if (val->format != 32 || val->size != 1 || val->type != prop_float)
@@ -2158,7 +1863,7 @@ LibinputSetPropertyAccelProfile(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 	uint32_t profiles = 0;
 
@@ -2199,7 +1904,7 @@ LibinputSetPropertyNaturalScroll(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -2231,7 +1936,7 @@ LibinputSetPropertySendEvents(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 	uint32_t modes = 0;
 
@@ -2270,7 +1975,7 @@ LibinputSetPropertyLeftHanded(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -2303,7 +2008,7 @@ LibinputSetPropertyScrollMethods(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 	uint32_t modes = 0;
 
@@ -2346,7 +2051,7 @@ LibinputSetPropertyScrollButton(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	CARD32* data;
 
 	if (val->format != 32 || val->size != 1 || val->type != XA_CARDINAL)
@@ -2380,7 +2085,7 @@ LibinputSetPropertyClickMethod(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 	uint32_t modes = 0;
 
@@ -2421,7 +2126,7 @@ LibinputSetPropertyMiddleEmulation(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -2452,7 +2157,7 @@ LibinputSetPropertyDisableWhileTyping(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	BOOL* data;
 
 	if (val->format != 8 || val->size != 1 || val->type != XA_INTEGER)
@@ -3201,7 +2906,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
+	struct libinput_device *device = driver_data->device;
 	const char *device_node;
 	CARD32 product[2];
 	int rc;
