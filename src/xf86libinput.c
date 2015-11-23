@@ -1758,7 +1758,7 @@ xf86libinput_hotplug_device(ClientPtr client, pointer closure)
 }
 
 static void
-xf86libinput_create_keyboard_subdevice(InputInfoPtr pInfo)
+xf86libinput_create_subdevice(InputInfoPtr pInfo, uint32_t capabilities)
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device;
@@ -1773,7 +1773,13 @@ xf86libinput_create_keyboard_subdevice(InputInfoPtr pInfo)
 
 	options = xf86OptionListDuplicate(pInfo->options);
 	options = xf86ReplaceStrOption(options, "_source", "_driver/libinput");
-	options = xf86ReplaceStrOption(options, "_libinput/caps", "keyboard");
+
+	if (capabilities & CAP_KEYBOARD)
+		options = xf86ReplaceBoolOption(options, "_libinput/cap-keyboard", 1);
+	if (capabilities & CAP_POINTER)
+		options = xf86ReplaceBoolOption(options, "_libinput/cap-pointer", 1);
+	if (capabilities & CAP_TOUCH)
+		options = xf86ReplaceBoolOption(options, "_libinput/cap-touch", 1);
 
 	/* need convert from one option list to the other. woohoo. */
 	o = options;
@@ -1807,6 +1813,21 @@ xf86libinput_is_subdevice(InputInfoPtr pInfo)
 	free(source);
 
 	return is_subdevice;
+}
+
+static inline uint32_t
+caps_from_options(InputInfoPtr pInfo)
+{
+	uint32_t capabilities = 0;
+
+	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-keyboard", 0))
+		capabilities |= CAP_KEYBOARD;
+	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-pointer", 0))
+		capabilities |= CAP_POINTER;
+	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-touch", 0))
+		capabilities |= CAP_TOUCH;
+
+	return capabilities;
 }
 
 static int
@@ -1903,7 +1924,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
 			driver_data->capabilities |= CAP_TOUCH;
 	} else {
-		driver_data->capabilities = CAP_KEYBOARD;
+		driver_data->capabilities = caps_from_options(pInfo);
 	}
 
 	/* Disable acceleration in the server, libinput does it for us */
@@ -1918,7 +1939,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	    driver_data->capabilities & CAP_KEYBOARD &&
 	    driver_data->capabilities & (CAP_POINTER|CAP_TOUCH)) {
 		driver_data->capabilities &= ~CAP_KEYBOARD;
-		xf86libinput_create_keyboard_subdevice(pInfo);
+		xf86libinput_create_subdevice(pInfo, CAP_KEYBOARD);
 	}
 
 	pInfo->type_name = xf86libinput_get_type_name(device, driver_data);
