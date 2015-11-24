@@ -136,6 +136,11 @@ struct xf86libinput {
 	struct xorg_list shared_device_link;
 };
 
+enum hotplug_when {
+	HOTPLUG_LATER,
+	HOTPLUG_NOW,
+};
+
 static inline int
 use_server_fd(const InputInfoPtr pInfo) {
 	return pInfo->fd > -1 && (pInfo->flags & XI86_SERVER_FD);
@@ -1740,25 +1745,38 @@ struct xf86libinput_hotplug_info {
 	InputOption *input_options;
 };
 
-static Bool
-xf86libinput_hotplug_device(ClientPtr client, pointer closure)
+static DeviceIntPtr
+xf86libinput_hotplug_device(struct xf86libinput_hotplug_info *hotplug)
 {
-	struct xf86libinput_hotplug_info *hotplug = closure;
-	DeviceIntPtr unused;
+	DeviceIntPtr dev;
 
-	NewInputDeviceRequest(hotplug->input_options,
-			      hotplug->attrs,
-			      &unused);
+	if (NewInputDeviceRequest(hotplug->input_options,
+				  hotplug->attrs,
+				  &dev) != Success)
+		dev = NULL;
 
 	input_option_free_list(&hotplug->input_options);
 	FreeInputAttributes(hotplug->attrs);
 	free(hotplug);
 
+	return dev;
+}
+
+static Bool
+xf86libinput_hotplug_device_cb(ClientPtr client, pointer closure)
+{
+	struct xf86libinput_hotplug_info *hotplug = closure;
+
+	xf86libinput_hotplug_device(hotplug);
+
 	return TRUE;
 }
 
-static void
-xf86libinput_create_subdevice(InputInfoPtr pInfo, uint32_t capabilities)
+static DeviceIntPtr
+xf86libinput_create_subdevice(InputInfoPtr pInfo,
+			      uint32_t capabilities,
+			      enum hotplug_when when,
+			      XF86OptionPtr extra_options)
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device;
@@ -1773,6 +1791,7 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo, uint32_t capabilities)
 
 	options = xf86OptionListDuplicate(pInfo->options);
 	options = xf86ReplaceStrOption(options, "_source", "_driver/libinput");
+	options = xf86OptionListMerge(options, extra_options);
 
 	if (capabilities & CAP_KEYBOARD)
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-keyboard", 1);
@@ -1793,13 +1812,18 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo, uint32_t capabilities)
 
 	hotplug = calloc(1, sizeof(*hotplug));
 	if (!hotplug)
-		return;
+		return NULL;
 
 	hotplug->input_options = iopts;
 	hotplug->attrs = DuplicateInputAttributes(pInfo->attrs);
 
 	xf86IDrvMsg(pInfo, X_INFO, "needs a virtual subdevice\n");
-	QueueWorkProc(xf86libinput_hotplug_device, serverClient, hotplug);
+	if (when == HOTPLUG_LATER)
+		QueueWorkProc(xf86libinput_hotplug_device_cb, serverClient, hotplug);
+	else
+		return xf86libinput_hotplug_device(hotplug);
+
+	return NULL;
 }
 
 static BOOL
@@ -1939,7 +1963,10 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	    driver_data->capabilities & CAP_KEYBOARD &&
 	    driver_data->capabilities & (CAP_POINTER|CAP_TOUCH)) {
 		driver_data->capabilities &= ~CAP_KEYBOARD;
-		xf86libinput_create_subdevice(pInfo, CAP_KEYBOARD);
+		xf86libinput_create_subdevice(pInfo,
+					      CAP_KEYBOARD,
+					      HOTPLUG_LATER,
+					      NULL);
 	}
 
 	pInfo->type_name = xf86libinput_get_type_name(device, driver_data);
