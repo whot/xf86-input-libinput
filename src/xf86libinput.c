@@ -791,7 +791,7 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 
 }
 
-static void
+static int
 xf86libinput_init_tablet_pen_or_eraser(InputInfoPtr pInfo,
 				       struct libinput_tablet_tool *tool)
 {
@@ -817,6 +817,37 @@ xf86libinput_init_tablet_pen_or_eraser(InputInfoPtr pInfo,
 					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_TILT_Y),
 					   min, max, res * 1000, 0, res * 1000, Absolute);
 	}
+
+	return axis;
+}
+
+static void
+xf86libinput_init_tablet_airbrush(InputInfoPtr pInfo,
+				  struct libinput_tablet_tool *tool)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int min, max, res;
+	int axis;
+
+	/* first axes are shared */
+	axis = xf86libinput_init_tablet_pen_or_eraser(pInfo, tool);
+	if (axis < 5) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Airbrush tool has missing pressure or tilt axes\n");
+		return;
+	}
+
+	if (!libinput_tablet_tool_has_slider(tool)) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Airbrush tool is missing the slider axis\n");
+		return;
+	}
+
+	min = -TABLET_AXIS_MAX;
+	max = TABLET_AXIS_MAX;
+	res = 0;
+
+	xf86InitValuatorAxisStruct(dev, axis,
+				   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_THROTTLE),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
 }
 
 static void
@@ -842,6 +873,8 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 		naxes++;
 	if (libinput_tablet_tool_has_tilt(tool))
 		naxes += 2;
+	if (libinput_tablet_tool_has_slider(tool))
+		naxes++;
 
 	InitPointerDeviceStruct((DevicePtr)dev,
 				driver_data->options.btnmap,
@@ -866,6 +899,9 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 	case LIBINPUT_TABLET_TOOL_TYPE_PEN:
 	case LIBINPUT_TABLET_TOOL_TYPE_ERASER:
 		xf86libinput_init_tablet_pen_or_eraser(pInfo, tool);
+		break;
+	case LIBINPUT_TABLET_TOOL_TYPE_AIRBRUSH:
+		xf86libinput_init_tablet_airbrush(pInfo, tool);
 		break;
 	default:
 		xf86IDrvMsg(pInfo, X_ERROR, "Tool type not supported yet\n");
@@ -1274,6 +1310,12 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 
 		value = libinput_event_tablet_tool_get_tilt_y(event);
 		valuator_mask_set_double(mask, 4, value);
+	}
+
+	if (libinput_tablet_tool_has_slider(tool)) {
+		value = libinput_event_tablet_tool_get_slider_position(event);
+		value *= TABLET_AXIS_MAX;
+		valuator_mask_set_double(mask, 5, value);
 	}
 
 	xf86PostMotionEventM(dev, Absolute, mask);
