@@ -851,6 +851,39 @@ xf86libinput_init_tablet_airbrush(InputInfoPtr pInfo,
 }
 
 static void
+xf86libinput_init_tablet_mouse(InputInfoPtr pInfo,
+			       struct libinput_tablet_tool *tool)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int min, max, res;
+	int axis;
+
+	if (!libinput_tablet_tool_has_rotation(tool)) {
+		xf86IDrvMsg(pInfo, X_ERROR, "Mouse tool is missing the rotation axis\n");
+		return;
+	}
+
+	min = 0;
+	max = TABLET_AXIS_MAX;
+	res = 0;
+
+	/* The mouse/lens tool don't have pressure, but for backwards-compat
+	   with the xorg wacom driver we initialize the the axis anyway */
+	axis = 2;
+	xf86InitValuatorAxisStruct(dev, axis,
+				   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_PRESSURE),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+
+	axis = 3;
+	min = -TABLET_AXIS_MAX;
+	max = TABLET_AXIS_MAX;
+	xf86InitValuatorAxisStruct(dev, axis,
+				   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_RZ),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	return;
+}
+
+static void
 xf86libinput_init_tablet(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev = pInfo->dev;
@@ -874,6 +907,8 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 	if (libinput_tablet_tool_has_tilt(tool))
 		naxes += 2;
 	if (libinput_tablet_tool_has_slider(tool))
+		naxes++;
+	if (libinput_tablet_tool_has_rotation(tool))
 		naxes++;
 
 	InitPointerDeviceStruct((DevicePtr)dev,
@@ -902,6 +937,10 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 		break;
 	case LIBINPUT_TABLET_TOOL_TYPE_AIRBRUSH:
 		xf86libinput_init_tablet_airbrush(pInfo, tool);
+		break;
+	case LIBINPUT_TABLET_TOOL_TYPE_MOUSE:
+	case LIBINPUT_TABLET_TOOL_TYPE_LENS:
+		xf86libinput_init_tablet_mouse(pInfo, tool);
 		break;
 	default:
 		xf86IDrvMsg(pInfo, X_ERROR, "Tool type not supported yet\n");
@@ -1316,6 +1355,12 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 		value = libinput_event_tablet_tool_get_slider_position(event);
 		value *= TABLET_AXIS_MAX;
 		valuator_mask_set_double(mask, 5, value);
+	}
+
+	if (libinput_tablet_tool_has_rotation(tool)) {
+		value = libinput_event_tablet_tool_get_rotation(event);
+		value *= TABLET_AXIS_MAX;
+		valuator_mask_set_double(mask, 3, value);
 	}
 
 	xf86PostMotionEventM(dev, Absolute, mask);
