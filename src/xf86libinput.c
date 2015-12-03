@@ -783,6 +783,34 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 }
 
 static void
+xf86libinput_init_tablet_pen_or_eraser(InputInfoPtr pInfo,
+				       struct libinput_tablet_tool *tool)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	int min, max, res;
+	int axis;
+
+	min = 0;
+	max = TABLET_AXIS_MAX;
+	res = 0;
+
+	axis = 2;
+	if (libinput_tablet_tool_has_pressure(tool))
+		xf86InitValuatorAxisStruct(dev, axis++,
+					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_PRESSURE),
+					   min, max, res * 1000, 0, res * 1000, Absolute);
+	min = -TABLET_AXIS_MAX;
+	if (libinput_tablet_tool_has_tilt(tool)) {
+		xf86InitValuatorAxisStruct(dev, axis++,
+					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_TILT_X),
+					   min, max, res * 1000, 0, res * 1000, Absolute);
+		xf86InitValuatorAxisStruct(dev, axis++,
+					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_TILT_Y),
+					   min, max, res * 1000, 0, res * 1000, Absolute);
+	}
+}
+
+static void
 xf86libinput_init_tablet(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev = pInfo->dev;
@@ -793,7 +821,6 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 	Atom btnlabels[TABLET_NUM_BUTTONS] = {0};
 	Atom axislabels[TOUCHPAD_NUM_AXES] = {0};
 	int nbuttons = TABLET_NUM_BUTTONS;
-	int axis;
 	int naxes = 2;
 
 	BUG_RETURN(driver_data->tablet_tool == NULL);
@@ -815,6 +842,7 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 				GetMotionHistorySize(),
 				naxes,
 				axislabels);
+
 	min = 0;
 	max = TABLET_AXIS_MAX;
 	res = 0;
@@ -825,19 +853,14 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
 
-	axis = 2;
-	if (libinput_tablet_tool_has_pressure(tool))
-		xf86InitValuatorAxisStruct(dev, axis++,
-					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_PRESSURE),
-					   min, max, res * 1000, 0, res * 1000, Absolute);
-	min = -TABLET_AXIS_MAX;
-	if (libinput_tablet_tool_has_tilt(tool)) {
-		xf86InitValuatorAxisStruct(dev, axis++,
-					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_TILT_X),
-					   min, max, res * 1000, 0, res * 1000, Absolute);
-		xf86InitValuatorAxisStruct(dev, axis++,
-					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_TILT_Y),
-					   min, max, res * 1000, 0, res * 1000, Absolute);
+	switch (libinput_tablet_tool_get_type(tool)) {
+	case LIBINPUT_TABLET_TOOL_TYPE_PEN:
+	case LIBINPUT_TABLET_TOOL_TYPE_ERASER:
+		xf86libinput_init_tablet_pen_or_eraser(pInfo, tool);
+		break;
+	default:
+		xf86IDrvMsg(pInfo, X_ERROR, "Tool type not supported yet\n");
+		break;
 	}
 
 	InitProximityClassDeviceStruct(dev);
