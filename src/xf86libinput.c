@@ -809,6 +809,12 @@ xf86libinput_init_tablet_pen_or_eraser(InputInfoPtr pInfo,
 					   min, max, res * 1000, 0, res * 1000, Absolute);
 	}
 
+	min = -TABLET_AXIS_MAX;
+	max = TABLET_AXIS_MAX;
+	if (libinput_tablet_tool_has_rotation(tool))
+		xf86InitValuatorAxisStruct(dev, axis++,
+					   XIGetKnownProperty(AXIS_LABEL_PROP_ABS_RZ),
+					   min, max, res * 1000, 0, res * 1000, Absolute);
 	return axis;
 }
 
@@ -1351,9 +1357,27 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 	}
 
 	if (libinput_tablet_tool_has_rotation(tool)) {
+		int valuator;
+
 		value = libinput_event_tablet_tool_get_rotation(event);
 		value *= TABLET_AXIS_MAX;
-		valuator_mask_set_double(mask, 3, value);
+
+		switch (libinput_tablet_tool_get_type(tool)) {
+		case LIBINPUT_TABLET_TOOL_TYPE_PEN:
+		case LIBINPUT_TABLET_TOOL_TYPE_ERASER:
+			valuator = 5;
+			break;
+		case LIBINPUT_TABLET_TOOL_TYPE_MOUSE:
+		case LIBINPUT_TABLET_TOOL_TYPE_LENS:
+			valuator = 3;
+			break;
+		default:
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Invalid rotation axis on tool\n");
+			break;
+		}
+
+		valuator_mask_set_double(mask, valuator, value);
 	}
 
 	xf86PostMotionEventM(dev, Absolute, mask);
