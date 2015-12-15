@@ -1175,7 +1175,12 @@ open_restricted(const char *path, int flags, void *data)
 	}
 
 	fd = xf86OpenSerial(pInfo->options);
-	return fd < 0 ? -errno : fd;
+	if (fd < 0)
+		return -errno;
+
+	xf86FlushInput(fd);
+
+	return fd;
 }
 
 static void
