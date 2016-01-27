@@ -2794,7 +2794,7 @@ LibinputInitTapDragLockProperty(DeviceIntPtr dev,
 	if (!prop_tap_drag_lock)
 		return;
 
-	drag_lock = libinput_device_config_tap_get_default_enabled(device);
+	drag_lock = libinput_device_config_tap_get_default_drag_lock_enabled(device);
 	prop_tap_drag_lock_default = LibinputMakeProperty(dev,
 							  LIBINPUT_PROP_TAP_DRAG_LOCK_DEFAULT,
 							  XA_INTEGER, 8,
