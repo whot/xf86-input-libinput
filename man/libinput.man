@@ -129,6 +129,14 @@ mouse is connected".
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
 .TP 7
+.BI "Option \*qTappingDrag\*q \*q" bool \*q
+Enables or disables drag during tapping behavior ("tap-and-drag"). When
+enabled, a tap followed by a finger held down causes a single button down
+only, all motions of that finger thus translate into dragging motion.
+Tap-and-drag requires option
+.B Tapping
+to be enabled.
+.TP 7
 .BI "Option \*qTappingDragLock\*q \*q" bool \*q
 Enables or disables drag lock during tapping behavior. When enabled, a
 finger up during tap-and-drag will not immediately release the button. If

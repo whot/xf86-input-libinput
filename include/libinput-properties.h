@@ -30,6 +30,12 @@
 /* Tapping default enabled/disabled: BOOL, 1 value, read-only */
 #define LIBINPUT_PROP_TAP_DEFAULT "libinput Tapping Enabled Default"
 
+/* Tap drag enabled/disabled: BOOL, 1 value */
+#define LIBINPUT_PROP_TAP_DRAG "libinput Tapping Drag Enabled"
+
+/* Tap drag default enabled/disabled: BOOL, 1 value */
+#define LIBINPUT_PROP_TAP_DRAG_DEFAULT "libinput Tapping Drag Enabled Default"
+
 /* Tap drag lock enabled/disabled: BOOL, 1 value */
 #define LIBINPUT_PROP_TAP_DRAG_LOCK "libinput Tapping Drag Lock Enabled"
 
