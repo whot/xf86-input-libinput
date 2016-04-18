@@ -70,12 +70,15 @@
 #define TABLET_AXIS_MAX 0xffffff
 #define TABLET_PRESSURE_AXIS_MAX 2047
 #define TABLET_TILT_AXIS_MAX 64
+#define TABLET_STRIP_AXIS_MAX 4096
+#define TABLET_RING_AXIS_MAX 71
 
 #define CAP_KEYBOARD	0x1
 #define CAP_POINTER	0x2
 #define CAP_TOUCH	0x4
 #define CAP_TABLET	0x8
 #define CAP_TABLET_TOOL	0x10
+#define CAP_TABLET_PAD	0x20
 
 struct xf86libinput_driver {
 	struct libinput *libinput;
@@ -957,6 +960,66 @@ xf86libinput_init_tablet(InputInfoPtr pInfo)
 	InitProximityClassDeviceStruct(dev);
 }
 
+static void
+xf86libinput_init_tablet_pad(InputInfoPtr pInfo)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->shared_device->device;
+	int min, max, res;
+	unsigned char btnmap[MAX_BUTTONS];
+	Atom btnlabels[MAX_BUTTONS] = {0};
+	Atom axislabels[TOUCHPAD_NUM_AXES] = {0};
+	int nbuttons;
+	int naxes = 7;
+
+	nbuttons = libinput_device_tablet_pad_get_num_buttons(device);
+	init_button_map(btnmap, nbuttons);
+
+	InitPointerDeviceStruct((DevicePtr)dev,
+				driver_data->options.btnmap,
+				nbuttons,
+				btnlabels,
+				xf86libinput_ptr_ctl,
+				GetMotionHistorySize(),
+				naxes,
+				axislabels);
+
+	/* For compat with xf86-input-wacom we init x, y, pressure, followed
+	 * by strip x, strip y, ring, ring2*/
+	min = 0;
+	max = TABLET_AXIS_MAX;
+	res = 0;
+	xf86InitValuatorAxisStruct(dev, 0,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_X),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	xf86InitValuatorAxisStruct(dev, 1,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	xf86InitValuatorAxisStruct(dev, 2,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_PRESSURE),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+
+	/* strip x */
+	max = TABLET_STRIP_AXIS_MAX;
+	xf86InitValuatorAxisStruct(dev, 3,
+			           None,
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	/* strip y */
+	xf86InitValuatorAxisStruct(dev, 4,
+			           None,
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	/* first ring */
+	max = TABLET_RING_AXIS_MAX;
+	xf86InitValuatorAxisStruct(dev, 5,
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_WHEEL),
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+	/* second ring */
+	xf86InitValuatorAxisStruct(dev, 6,
+			           None,
+				   min, max, res * 1000, 0, res * 1000, Absolute);
+}
+
 static int
 xf86libinput_init(DeviceIntPtr dev)
 {
@@ -982,6 +1045,8 @@ xf86libinput_init(DeviceIntPtr dev)
 		xf86libinput_init_touch(pInfo);
 	if (driver_data->capabilities & CAP_TABLET_TOOL)
 		xf86libinput_init_tablet(pInfo);
+	if (driver_data->capabilities & CAP_TABLET_PAD)
+		xf86libinput_init_tablet_pad(pInfo);
 
 	LibinputApplyConfig(dev);
 	LibinputInitProperty(dev);
@@ -1476,6 +1541,74 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 }
 
 static void
+xf86libinput_handle_tablet_pad_button(InputInfoPtr pInfo,
+				      struct libinput_event_tablet_pad *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	int button;
+	int is_press;
+
+	if ((driver_data->capabilities & CAP_TABLET_PAD) == 0)
+		return;
+
+	button = 1 + libinput_event_tablet_pad_get_button_number(event);
+	is_press = (libinput_event_tablet_pad_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
+
+	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
+}
+
+static void
+xf86libinput_handle_tablet_pad_strip(InputInfoPtr pInfo,
+				     struct libinput_event_tablet_pad *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	ValuatorMask *mask = driver_data->valuators;
+	double value;
+	int axis = 3;
+	int v;
+
+	if ((driver_data->capabilities & CAP_TABLET_PAD) == 0)
+		return;
+
+	/* this isn't compatible with the wacom driver which just forwards
+	 * the values and lets the clients handle them with log2. */
+	axis += libinput_event_tablet_pad_get_strip_number(event);
+	value = libinput_event_tablet_pad_get_strip_position(event);
+	v = TABLET_STRIP_AXIS_MAX * value;
+
+	valuator_mask_zero(mask);
+	valuator_mask_set(mask, axis, v);
+
+	xf86PostMotionEventM(dev, Absolute, mask);
+}
+
+static void
+xf86libinput_handle_tablet_pad_ring(InputInfoPtr pInfo,
+				     struct libinput_event_tablet_pad *event)
+{
+	DeviceIntPtr dev = pInfo->dev;
+	struct xf86libinput *driver_data = pInfo->private;
+	ValuatorMask *mask = driver_data->valuators;
+	double value;
+	int axis = 5;
+	int v;
+
+	if ((driver_data->capabilities & CAP_TABLET_PAD) == 0)
+		return;
+
+	axis += libinput_event_tablet_pad_get_ring_number(event);
+	value = libinput_event_tablet_pad_get_ring_position(event)/360.0;
+	v = TABLET_RING_AXIS_MAX * value;
+
+	valuator_mask_zero(mask);
+	valuator_mask_set(mask, axis, v);
+
+	xf86PostMotionEventM(dev, Absolute, mask);
+}
+
+static void
 xf86libinput_handle_event(struct libinput_event *event)
 {
 	struct libinput_device *device;
@@ -1548,6 +1681,18 @@ xf86libinput_handle_event(struct libinput_event *event)
 		case LIBINPUT_EVENT_TABLET_TOOL_TIP:
 			xf86libinput_handle_tablet_tip(pInfo,
 						       libinput_event_get_tablet_tool_event(event));
+			break;
+		case LIBINPUT_EVENT_TABLET_PAD_BUTTON:
+			xf86libinput_handle_tablet_pad_button(pInfo,
+							      libinput_event_get_tablet_pad_event(event));
+			break;
+		case LIBINPUT_EVENT_TABLET_PAD_RING:
+			xf86libinput_handle_tablet_pad_ring(pInfo,
+							    libinput_event_get_tablet_pad_event(event));
+			break;
+		case LIBINPUT_EVENT_TABLET_PAD_STRIP:
+			xf86libinput_handle_tablet_pad_strip(pInfo,
+							     libinput_event_get_tablet_pad_event(event));
 			break;
 	}
 }
@@ -2172,6 +2317,8 @@ xf86libinput_get_type_name(struct libinput_device *device,
 		type_name = XI_MOUSE;
 	else if (driver_data->capabilities & CAP_TABLET)
 		type_name = XI_TABLET;
+	else if (driver_data->capabilities & CAP_TABLET_PAD)
+		type_name = "PAD";
 	else if (driver_data->capabilities & CAP_TABLET_TOOL){
 		switch (libinput_tablet_tool_get_type(driver_data->tablet_tool)) {
 		case LIBINPUT_TABLET_TOOL_TYPE_PEN:
@@ -2273,6 +2420,8 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo,
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-touch", 1);
 	if (capabilities & CAP_TABLET_TOOL)
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-tablet-tool", 1);
+	if (capabilities & CAP_TABLET_PAD)
+		options = xf86ReplaceBoolOption(options, "_libinput/cap-tablet-pad", 1);
 
 	/* need convert from one option list to the other. woohoo. */
 	o = options;
@@ -2451,6 +2600,8 @@ xf86libinput_pre_init(InputDriverPtr drv,
 			driver_data->capabilities |= CAP_TOUCH;
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TABLET_TOOL))
 			driver_data->capabilities |= CAP_TABLET;
+		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TABLET_PAD))
+			driver_data->capabilities |= CAP_TABLET_PAD;
 	} else {
 
 		driver_data->capabilities = caps_from_options(pInfo);
