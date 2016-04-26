@@ -27,7 +27,7 @@ MAINTAINERCLEANFILES = ChangeLog INSTALL
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = xorg-libinput.pc
 
-dist_xorgconf_DATA = conf/90-libinput.conf
+dist_xorgconf_DATA = conf/60-libinput.conf
 
 .PHONY: ChangeLog INSTALL
 
