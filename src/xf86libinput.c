@@ -1382,7 +1382,7 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 		default:
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Invalid rotation axis on tool\n");
-			break;
+			return;
 		}
 
 		valuator_mask_set_double(mask, valuator, value);
@@ -3828,6 +3828,11 @@ LibinputInitDragLockProperty(DeviceIntPtr dev,
 		sz = draglock_get_pairs(&driver_data->draglock,
 					dl_values, sizeof(dl_values));
 		break;
+	default:
+		xf86IDrvMsg(dev->public.devicePrivate,
+			    X_ERROR,
+			    "Invalid drag lock mode\n");
+		return;
 	}
 
 	prop_draglock = LibinputMakeProperty(dev,
