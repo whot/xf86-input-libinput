@@ -1116,7 +1116,7 @@ xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	if (draglock_get_mode(&driver_data->draglock) != DRAGLOCK_DISABLED)
 		draglock_filter_button(&driver_data->draglock, &button, &is_press);
 
-	if (button)
+	if (button && button < 256)
 		xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
 }
 
