@@ -1492,17 +1492,12 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 	char name[64];
 	ValuatorMask *mask = driver_data->valuators;
 	double x, y;
+	BOOL in_prox;
 
 	x = libinput_event_tablet_tool_get_x_transformed(event, TABLET_AXIS_MAX);
 	y = libinput_event_tablet_tool_get_y_transformed(event, TABLET_AXIS_MAX);
 	valuator_mask_set_double(mask, 0, x);
 	valuator_mask_set_double(mask, 1, y);
-
-	if (libinput_event_tablet_tool_get_proximity_state(event) ==
-	    LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_OUT) {
-		xf86PostProximityEventM(pDev, FALSE, mask);
-		return;
-	}
 
 	tool = libinput_event_tablet_tool_get_tool(event);
 	serial = libinput_tablet_tool_get_serial(tool);
@@ -1513,8 +1508,10 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 				 shared_device_link) {
 		if (dev->tablet_tool &&
 		    libinput_tablet_tool_get_serial(dev->tablet_tool) == serial &&
-		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id)
-			return;
+		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id) {
+			pDev = dev->pInfo->dev;
+			goto out;
+		}
 	}
 
 	t = calloc(1, sizeof *t);
@@ -1537,7 +1534,10 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 
 	pDev = xf86libinput_create_subdevice(pInfo, CAP_TABLET_TOOL, HOTPLUG_NOW, options);
 
-	xf86PostProximityEventM(pDev, TRUE, mask);
+out:
+	in_prox = libinput_event_tablet_tool_get_proximity_state(event) ==
+				LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN;
+	xf86PostProximityEventM(pDev, in_prox, mask);
 }
 
 static void
