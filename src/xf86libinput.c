@@ -2875,9 +2875,9 @@ LibinputSetPropertyCalibration(DeviceIntPtr dev,
 	data = (float*)val->data;
 
 	if (checkonly) {
-		if (data[6] != 0 ||
-		    data[7] != 0 ||
-		    data[8] != 1)
+		if (data[6] != 0.0 ||
+		    data[7] != 0.0 ||
+		    data[8] != 1.0)
 			return BadValue;
 
 		if (!xf86libinput_check_device (dev, atom))
@@ -2911,7 +2911,7 @@ LibinputSetPropertyAccel(DeviceIntPtr dev,
 	data = (float*)val->data;
 
 	if (checkonly) {
-		if (*data < -1 || *data > 1)
+		if (*data < -1.0 || *data > 1.0)
 			return BadValue;
 
 		if (!xf86libinput_check_device (dev, atom))
@@ -3534,9 +3534,9 @@ LibinputInitCalibrationProperty(DeviceIntPtr dev,
 	   transformation matrix which also has the full matrix */
 
 	libinput_device_config_calibration_get_matrix(device, calibration);
-	calibration[6] = 0;
-	calibration[7] = 0;
-	calibration[8] = 1;
+	calibration[6] = 0.0;
+	calibration[7] = 0.0;
+	calibration[8] = 1.0;
 
 	prop_calibration = LibinputMakeProperty(dev,
 						LIBINPUT_PROP_CALIBRATION,
