@@ -150,6 +150,8 @@ struct xf86libinput {
 		unsigned char btnmap[MAX_BUTTONS + 1];
 
 		BOOL horiz_scrolling_enabled;
+
+		float rotation_angle;
 	} options;
 
 	struct draglock draglock;
@@ -520,6 +522,13 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set DisableWhileTyping to %d\n",
 			    driver_data->options.disable_while_typing);
+
+	if (libinput_device_config_rotation_is_available(device) &&
+	    libinput_device_config_rotation_set_angle(device, driver_data->options.rotation_angle) != LIBINPUT_CONFIG_STATUS_SUCCESS)
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set RotationAngle to %.2f\n",
+			    driver_data->options.rotation_angle);
+
 }
 
 static int
@@ -2307,6 +2316,29 @@ xf86libinput_parse_horiz_scroll_option(InputInfoPtr pInfo)
 	return xf86SetBoolOption(pInfo->options, "HorizontalScrolling", TRUE);
 }
 
+static inline double
+xf86libinput_parse_rotation_angle_option(InputInfoPtr pInfo,
+					 struct libinput_device *device)
+{
+	double angle;
+
+	if (!libinput_device_config_rotation_is_available(device))
+		return 0.0;
+
+	angle = xf86SetRealOption(pInfo->options,
+				  "RotationAngle",
+				  libinput_device_config_rotation_get_default_angle(device));
+	if (libinput_device_config_rotation_set_angle(device, angle) !=
+	    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Invalid angle %.2f, using 0.0 instead\n",
+			    angle);
+		angle = libinput_device_config_rotation_get_angle(device);
+	}
+
+	return angle;
+}
+
 static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
@@ -2328,6 +2360,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	options->click_method = xf86libinput_parse_clickmethod_option(pInfo, device);
 	options->middle_emulation = xf86libinput_parse_middleemulation_option(pInfo, device);
 	options->disable_while_typing = xf86libinput_parse_disablewhiletyping_option(pInfo, device);
+	options->rotation_angle = xf86libinput_parse_rotation_angle_option(pInfo, device);
 	xf86libinput_parse_calibration_option(pInfo, device, driver_data->options.matrix);
 
 	/* non-libinput options */
@@ -2778,6 +2811,8 @@ static Atom prop_mode_groups;
 static Atom prop_mode_groups_buttons;
 static Atom prop_mode_groups_rings;
 static Atom prop_mode_groups_strips;
+static Atom prop_rotation_angle;
+static Atom prop_rotation_angle_default;
 
 /* driver properties */
 static Atom prop_draglock;
@@ -3444,7 +3479,39 @@ LibinputSetPropertyHorizScroll(DeviceIntPtr dev,
 	}
 
 	return Success;
- }
+}
+
+static inline int
+LibinputSetPropertyRotationAngle(DeviceIntPtr dev,
+				 Atom atom,
+				 XIPropertyValuePtr val,
+				 BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->shared_device->device;
+	float *angle;
+
+	if (val->format != 32 || val->size != 1 || val->type != prop_float)
+		return BadMatch;
+
+	angle = (float*)val->data;
+
+	if (checkonly) {
+		if (*angle < 0.0 || *angle >= 360.0)
+			return BadValue;
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		if (libinput_device_config_rotation_is_available(device) == 0)
+			return BadMatch;
+	} else {
+		driver_data->options.rotation_angle = *angle;
+	}
+
+	return Success;
+}
 
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
@@ -3494,6 +3561,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		else
 			return BadAccess;
 	}
+	else if (atom == prop_rotation_angle)
+		rc = LibinputSetPropertyRotationAngle(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
@@ -3515,7 +3584,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		 atom == prop_mode_groups_available ||
 		 atom == prop_mode_groups_buttons ||
 		 atom == prop_mode_groups_rings ||
-		 atom == prop_mode_groups_strips)
+		 atom == prop_mode_groups_strips ||
+		 atom == prop_rotation_angle_default)
 		return BadAccess; /* read-only */
 	else
 		return Success;
@@ -4233,6 +4303,33 @@ LibinputInitHorizScrollProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitRotationAngleProperty(DeviceIntPtr dev,
+				  struct xf86libinput *driver_data,
+				  struct libinput_device *device)
+{
+	float angle = driver_data->options.rotation_angle;
+
+	if (!libinput_device_config_rotation_is_available(device))
+		return;
+
+	prop_rotation_angle = LibinputMakeProperty(dev,
+						   LIBINPUT_PROP_ROTATION_ANGLE,
+						   prop_float, 32,
+						   1, &angle);
+	if (!prop_rotation_angle)
+		return;
+
+	angle = libinput_device_config_rotation_get_default_angle(device);
+	prop_rotation_angle_default = LibinputMakeProperty(dev,
+							   LIBINPUT_PROP_ROTATION_ANGLE_DEFAULT,
+							   prop_float, 32,
+							   1, &angle);
+
+	if (!prop_rotation_angle_default)
+		return;
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -4257,6 +4354,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitMiddleEmulationProperty(dev, driver_data, device);
 	LibinputInitDisableWhileTypingProperty(dev, driver_data, device);
 	LibinputInitModeGroupProperties(dev, driver_data, device);
+	LibinputInitRotationAngleProperty(dev, driver_data, device);
 
 	/* Device node property, read-only  */
 	device_node = driver_data->path;

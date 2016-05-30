@@ -170,4 +170,10 @@
  */
 #define LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_RINGS "libinput Pad Mode Group Rings"
 
+/* Device rotation: FLOAT, 1 value, 32 bit */
+#define LIBINPUT_PROP_ROTATION_ANGLE "libinput Rotation Angle"
+
+/* Device rotation: FLOAT, 1 value, 32 bit, read-only */
+#define LIBINPUT_PROP_ROTATION_ANGLE_DEFAULT "libinput Rotation Angle Default"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

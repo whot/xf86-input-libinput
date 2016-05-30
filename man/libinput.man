@@ -126,6 +126,10 @@ events.
 Sets the send events mode to disabled, enabled, or "disable when an external
 mouse is connected".
 .TP 7
+.BI "Option \*qRotationAngle\*q \*q" float \*q
+Sets the rotation angle of the device to the given angle, in degrees
+clockwise. The angle must be between 0.0 (inclusive) and 360.0 (exclusive).
+.TP 7
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
 .TP 7
@@ -239,6 +243,10 @@ disabled.
 .BI "libinput Disable While Typing Enabled"
 1 boolean value (8 bit, 0 or 1). Indicates if disable while typing is
 enabled or disabled.
+.TP 7
+.BI "libinput Rotation Angle"
+1 32-bit float value [0.0 to 360.0). Sets the rotation angle of the device,
+clockwise of its natural neutral position.
 .PP
 The above properties have a
 .BI "libinput <property name> Default"
