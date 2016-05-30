@@ -55,6 +55,10 @@
 #undef HAVE_VMASK_UNACCEL
 #endif
 
+#if GET_ABI_MAJOR(ABI_XINPUT_VERSION) >= 23
+#define HAVE_THREADED_INPUT	1
+#endif
+
 #define TOUCHPAD_NUM_AXES 4 /* x, y, hscroll, vscroll */
 #define TABLET_NUM_BUTTONS 7 /* we need scroll buttons */
 #define TOUCH_MAX_SLOTS 15
@@ -522,8 +526,12 @@ xf86libinput_on(DeviceIntPtr dev)
 	pInfo->fd = libinput_get_fd(libinput);
 
 	if (driver_context.device_enabled_count == 0) {
+#if HAVE_THREADED_INPUT
+		xf86AddEnabledDevice(pInfo);
+#else
 		/* Can't use xf86AddEnabledDevice on an epollfd */
 		AddEnabledDevice(pInfo->fd);
+#endif
 	}
 
 	driver_context.device_enabled_count++;
@@ -542,7 +550,11 @@ xf86libinput_off(DeviceIntPtr dev)
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
 
 	if (--driver_context.device_enabled_count == 0) {
+#if HAVE_THREADED_INPUT
+		xf86RemoveEnabledDevice(pInfo);
+#else
 		RemoveEnabledDevice(pInfo->fd);
+#endif
 	}
 
 	if (use_server_fd(pInfo)) {
