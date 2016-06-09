@@ -798,10 +798,10 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 	res = 0;
 
 	xf86InitValuatorAxisStruct(dev, 0,
-			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_X),
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_MT_POSITION_X),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
 	xf86InitValuatorAxisStruct(dev, 1,
-			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
+			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_MT_POSITION_Y),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
 	InitTouchClassDeviceStruct(dev, TOUCH_MAX_SLOTS, XIDirectTouch, 2);
 
