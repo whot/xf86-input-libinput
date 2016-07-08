@@ -985,7 +985,7 @@ xf86libinput_init_tablet_pad(InputInfoPtr pInfo)
 	int nbuttons;
 	int naxes = 7;
 
-	nbuttons = libinput_device_tablet_pad_get_num_buttons(device);
+	nbuttons = libinput_device_tablet_pad_get_num_buttons(device) + 4;
 	init_button_map(btnmap, nbuttons);
 
 	InitPointerDeviceStruct((DevicePtr)dev,
@@ -1565,6 +1565,8 @@ xf86libinput_handle_tablet_pad_button(InputInfoPtr pInfo,
 		return;
 
 	button = 1 + libinput_event_tablet_pad_get_button_number(event);
+	if (button > 3)
+		button += 4; /* offset by scroll buttons */
 	is_press = (libinput_event_tablet_pad_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
 
 	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
