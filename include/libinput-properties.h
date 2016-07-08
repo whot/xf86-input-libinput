@@ -142,4 +142,32 @@
  * If disabled, horizontal scroll events are discarded */
 #define LIBINPUT_PROP_HORIZ_SCROLL_ENABLED "libinput Horizonal Scroll Enabled"
 
+/* Number of modes each pad mode group has available: CARD8, one for each
+ * pad mode group, read-only.
+ */
+#define LIBINPUT_PROP_TABLET_PAD_MODE_GROUPS_AVAILABLE "libinput Pad Mode Groups Modes Available"
+
+/* Mode each pad mode group is currently in: CARD8, one for each pad mode
+ * group, read-only.
+ */
+#define LIBINPUT_PROP_TABLET_PAD_MODE_GROUPS "libinput Pad Mode Groups Modes"
+
+/* The association of each logical button with the pad mode group: INT8,
+ * one for each logical button. If set to -1 the button cannot be associated
+ * with a mode group. read-only
+ */
+#define LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_BUTTONS "libinput Pad Mode Group Buttons"
+
+/* The association of each logical strip with the pad mode group: INT8,
+ * one for each logical strip. If set to -1 the strip cannot be associated
+ * with a mode group. read-only
+ */
+#define LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_STRIPS "libinput Pad Mode Group Strips"
+
+/* The association of each logical ring with the pad mode group: INT8,
+ * one for each logical ring. If set to -1 the ring cannot be associated
+ * with a mode group. read-only
+ */
+#define LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_RINGS "libinput Pad Mode Group Rings"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

@@ -158,6 +158,8 @@ struct xf86libinput {
 	struct xorg_list shared_device_link;
 
 	struct libinput_tablet_tool *tablet_tool;
+
+	bool allow_mode_group_updates;
 };
 
 enum hotplug_when {
@@ -170,6 +172,9 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo,
 			      uint32_t capabilities,
 			      enum hotplug_when,
 			      XF86OptionPtr extra_opts);
+static inline void
+update_mode_prop(InputInfoPtr pInfo,
+		 struct libinput_event_tablet_pad *event);
 
 static inline int
 use_server_fd(const InputInfoPtr pInfo) {
@@ -1571,18 +1576,24 @@ xf86libinput_handle_tablet_pad_button(InputInfoPtr pInfo,
 {
 	DeviceIntPtr dev = pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
-	int button;
+	struct libinput_tablet_pad_mode_group *group;
+	int button, b;
 	int is_press;
 
 	if ((driver_data->capabilities & CAP_TABLET_PAD) == 0)
 		return;
 
-	button = 1 + libinput_event_tablet_pad_get_button_number(event);
+	b = libinput_event_tablet_pad_get_button_number(event);
+	button = 1 + b;
 	if (button > 3)
 		button += 4; /* offset by scroll buttons */
 	is_press = (libinput_event_tablet_pad_get_button_state(event) == LIBINPUT_BUTTON_STATE_PRESSED);
 
 	xf86PostButtonEvent(dev, Relative, button, is_press, 0, 0);
+
+	group = libinput_event_tablet_pad_get_mode_group(event);
+	if (libinput_tablet_pad_mode_group_button_is_toggle(group, b))
+		update_mode_prop(pInfo, event);
 }
 
 static void
@@ -2762,6 +2773,11 @@ static Atom prop_middle_emulation;
 static Atom prop_middle_emulation_default;
 static Atom prop_disable_while_typing;
 static Atom prop_disable_while_typing_default;
+static Atom prop_mode_groups_available;
+static Atom prop_mode_groups;
+static Atom prop_mode_groups_buttons;
+static Atom prop_mode_groups_rings;
+static Atom prop_mode_groups_strips;
 
 /* driver properties */
 static Atom prop_draglock;
@@ -2771,6 +2787,52 @@ static Atom prop_horiz_scroll;
 static Atom prop_float;
 static Atom prop_device;
 static Atom prop_product_id;
+
+static inline void
+update_mode_prop(InputInfoPtr pInfo,
+		 struct libinput_event_tablet_pad *event)
+{
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_tablet_pad_mode_group *group;
+	unsigned int mode;
+	unsigned int idx;
+	XIPropertyValuePtr val;
+	int rc;
+	unsigned char groups[4] = {0};
+
+	rc = XIGetDeviceProperty(pInfo->dev,
+				 prop_mode_groups,
+				 &val);
+	if (rc != Success ||
+	    val->format != 8 ||
+	    val->size <= 0)
+		return;
+
+	memcpy(groups, (unsigned char*)val->data, val->size);
+
+	group = libinput_event_tablet_pad_get_mode_group(event);
+	mode = libinput_event_tablet_pad_get_mode(event);
+	idx = libinput_tablet_pad_mode_group_get_index(group);
+	if (idx >= ARRAY_SIZE(groups))
+		return;
+
+	if (groups[idx] == mode)
+		return;
+
+	groups[idx] = mode;
+
+	driver_data->allow_mode_group_updates = true;
+	rc = XIChangeDeviceProperty(pInfo->dev,
+				    prop_mode_groups,
+				    XA_INTEGER, 8,
+				    PropModeReplace,
+				    val->size,
+				    groups,
+				    TRUE);
+	driver_data->allow_mode_group_updates = false;
+	if (rc != Success)
+		return;
+}
 
 static inline BOOL
 xf86libinput_check_device (DeviceIntPtr dev,
@@ -3423,6 +3485,15 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyDragLockButtons(dev, atom, val, checkonly);
 	else if (atom == prop_horiz_scroll)
 		rc = LibinputSetPropertyHorizScroll(dev, atom, val, checkonly);
+	else if (atom == prop_mode_groups) {
+		InputInfoPtr pInfo = dev->public.devicePrivate;
+		struct xf86libinput *driver_data = pInfo->private;
+
+		if (driver_data->allow_mode_group_updates)
+			return Success;
+		else
+			return BadAccess;
+	}
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
@@ -3440,7 +3511,11 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		 atom == prop_click_method_default ||
 		 atom == prop_click_methods_available ||
 		 atom == prop_middle_emulation_default ||
-		 atom == prop_disable_while_typing_default)
+		 atom == prop_disable_while_typing_default ||
+		 atom == prop_mode_groups_available ||
+		 atom == prop_mode_groups_buttons ||
+		 atom == prop_mode_groups_rings ||
+		 atom == prop_mode_groups_strips)
 		return BadAccess; /* read-only */
 	else
 		return Success;
@@ -3985,6 +4060,132 @@ LibinputInitDisableWhileTypingProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitModeGroupProperties(DeviceIntPtr dev,
+				       struct xf86libinput *driver_data,
+				       struct libinput_device *device)
+{
+	struct libinput_tablet_pad_mode_group *group;
+	int ngroups, nmodes, mode;
+	int nbuttons, nstrips, nrings;
+	unsigned char groups[4] = {0},
+		      current[4] = {0},
+		      associations[MAX_BUTTONS] = {0};
+	int g, b, r, s;
+
+	if (!libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TABLET_PAD))
+		return;
+
+	ngroups = libinput_device_tablet_pad_get_num_mode_groups(device);
+	if (ngroups <= 0)
+		return;
+
+	group = libinput_device_tablet_pad_get_mode_group(device, 0);
+	nmodes = libinput_tablet_pad_mode_group_get_num_modes(group);
+	if (ngroups == 1 && nmodes == 1)
+		return;
+
+	ngroups = min(ngroups, ARRAY_SIZE(groups));
+	for (g = 0; g < ngroups; g++) {
+		group = libinput_device_tablet_pad_get_mode_group(device, g);
+		nmodes = libinput_tablet_pad_mode_group_get_num_modes(group);
+		mode = libinput_tablet_pad_mode_group_get_mode(group);
+
+		groups[g] = nmodes;
+		current[g] = mode;
+	}
+
+	prop_mode_groups_available = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_TABLET_PAD_MODE_GROUPS_AVAILABLE,
+							  XA_INTEGER,
+							  8,
+							  ngroups,
+							  groups);
+	if (!prop_mode_groups_available)
+		return;
+
+	prop_mode_groups = LibinputMakeProperty(dev,
+						LIBINPUT_PROP_TABLET_PAD_MODE_GROUPS,
+						XA_INTEGER,
+						8,
+						ngroups,
+						current);
+	if (!prop_mode_groups)
+		return;
+
+	for (b = 0; b < ARRAY_SIZE(associations); b++)
+		associations[b] = -1;
+
+	nbuttons = libinput_device_tablet_pad_get_num_buttons(device);
+	for (b = 0; b < nbuttons; b++) {
+		/* logical buttons exclude scroll wheel buttons */
+		int lb = b <= 3 ? b : b + 4;
+		associations[lb] = -1;
+		for (g = 0; g < ngroups; g++) {
+			group = libinput_device_tablet_pad_get_mode_group(device, g);
+			if (libinput_tablet_pad_mode_group_has_button(group, b)) {
+				associations[lb] = g;
+				break;
+			}
+		}
+	}
+
+	prop_mode_groups_buttons = LibinputMakeProperty(dev,
+							LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_BUTTONS,
+							XA_INTEGER,
+							8,
+							nbuttons,
+							associations);
+	if (!prop_mode_groups_buttons)
+		return;
+
+	nrings = libinput_device_tablet_pad_get_num_rings(device);
+	if (nrings) {
+		for (r = 0; r < nrings; r++) {
+			associations[r] = -1;
+			for (g = 0; g < ngroups; g++) {
+				group = libinput_device_tablet_pad_get_mode_group(device, g);
+				if (libinput_tablet_pad_mode_group_has_ring(group, r)) {
+					associations[r] = g;
+					break;
+				}
+			}
+		}
+
+		prop_mode_groups_rings = LibinputMakeProperty(dev,
+								LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_RINGS,
+								XA_INTEGER,
+								8,
+								nrings,
+								associations);
+		if (!prop_mode_groups_rings)
+			return;
+	}
+
+	nstrips = libinput_device_tablet_pad_get_num_strips(device);
+	if (nstrips) {
+		for (s = 0; s < nstrips; s++) {
+			associations[r] = -1;
+			for (g = 0; g < ngroups; g++) {
+				group = libinput_device_tablet_pad_get_mode_group(device, g);
+				if (libinput_tablet_pad_mode_group_has_strip(group, s)) {
+					associations[s] = g;
+					break;
+				}
+			}
+		}
+
+		prop_mode_groups_strips = LibinputMakeProperty(dev,
+								LIBINPUT_PROP_TABLET_PAD_MODE_GROUP_STRIPS,
+								XA_INTEGER,
+								8,
+								nstrips,
+								associations);
+		if (!prop_mode_groups_strips)
+			return;
+	}
+}
+
+static void
 LibinputInitDragLockProperty(DeviceIntPtr dev,
 			     struct xf86libinput *driver_data)
 {
@@ -4055,6 +4256,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitClickMethodsProperty(dev, driver_data, device);
 	LibinputInitMiddleEmulationProperty(dev, driver_data, device);
 	LibinputInitDisableWhileTypingProperty(dev, driver_data, device);
+	LibinputInitModeGroupProperties(dev, driver_data, device);
 
 	/* Device node property, read-only  */
 	device_node = driver_data->path;
