@@ -2599,9 +2599,12 @@ xf86libinput_pre_init(InputDriverPtr drv,
 			xf86IDrvMsg(pInfo, X_ERROR, "Failed to find parent device\n");
 			goto fail;
 		}
-		xf86IDrvMsg(pInfo, X_INFO, "is a virtual subdevice\n");
 
 		parent_driver_data = parent->private;
+		if (!parent_driver_data) /* parent already removed again */
+			goto fail;
+
+		xf86IDrvMsg(pInfo, X_INFO, "is a virtual subdevice\n");
 		shared_device = xf86libinput_shared_ref(parent_driver_data->shared_device);
 		device = shared_device->device;
 	}
