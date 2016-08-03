@@ -2383,10 +2383,20 @@ xf86libinput_hotplug_device(struct xf86libinput_hotplug_info *hotplug)
 {
 	DeviceIntPtr dev;
 
+#if HAVE_THREADED_INPUT
+	input_lock();
+#else
+	int sigstate = xf86BlockSIGIO();
+#endif
 	if (NewInputDeviceRequest(hotplug->input_options,
 				  hotplug->attrs,
 				  &dev) != Success)
 		dev = NULL;
+#if HAVE_THREADED_INPUT
+	input_unlock();
+#else
+	xf86UnblockSIGIO(sigstate);
+#endif
 
 	input_option_free_list(&hotplug->input_options);
 	FreeInputAttributes(hotplug->attrs);
