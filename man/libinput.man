@@ -133,6 +133,10 @@ clockwise. The angle must be between 0.0 (inclusive) and 360.0 (exclusive).
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
 .TP 7
+.BI "Option \*qTappingButtonMap\*q \*q" (lrm|lmr) \*q
+Set the button mapping for 1/2/3-finger taps to left/right/middle or
+left/middle/right, respectively.
+.TP 7
 .BI "Option \*qTappingDrag\*q \*q" bool \*q
 Enables or disables drag during tapping behavior ("tap-and-drag"). When
 enabled, a tap followed by a finger held down causes a single button down
@@ -187,6 +191,10 @@ driver.
 .TP 7
 .BI "libinput Tapping Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables tapping
+.TP 7
+.BI "libinput Tapping Button Mapping Enabled"
+2 boolean value (8 bit, 0 or 1), in order "lrm" and "lmr". Indicates which
+button mapping is currently enabled on this device.
 .TP 7
 .BI "libinput Tapping Drag Lock Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables drag lock during tapping

@@ -135,6 +135,7 @@ struct xf86libinput {
 		BOOL tapping;
 		BOOL tap_drag;
 		BOOL tap_drag_lock;
+		enum libinput_config_tap_button_map tap_button_map;
 		BOOL natural_scrolling;
 		BOOL left_handed;
 		BOOL middle_emulation;
@@ -432,6 +433,21 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set Tapping to %d\n",
 			    driver_data->options.tapping);
+
+	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
+	    libinput_device_config_tap_set_button_map(device,
+						      driver_data->options.tap_button_map) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		const char *map;
+
+		switch(driver_data->options.tap_button_map) {
+		case LIBINPUT_CONFIG_TAP_MAP_LRM: map = "lrm"; break;
+		case LIBINPUT_CONFIG_TAP_MAP_LMR: map = "lmr"; break;
+		default: map = "unknown"; break;
+		}
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set Tapping ButtonMap to %s\n",
+			    map);
+	}
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
 	    libinput_device_config_tap_set_drag_lock_enabled(device,
@@ -1942,6 +1958,43 @@ xf86libinput_parse_tap_drag_lock_option(InputInfoPtr pInfo,
 	return drag_lock;
 }
 
+static inline enum libinput_config_tap_button_map
+xf86libinput_parse_tap_buttonmap_option(InputInfoPtr pInfo,
+					struct libinput_device *device)
+{
+	enum libinput_config_tap_button_map map;
+	char *str;
+
+	if (libinput_device_config_tap_get_finger_count(device) == 0)
+		return FALSE;
+
+	map = libinput_device_config_tap_get_button_map(device);
+	str = xf86SetStrOption(pInfo->options,
+			       "TappingButtonMap",
+			       NULL);
+	if (str) {
+		if (strcmp(str, "lmr") == 0)
+			map = LIBINPUT_CONFIG_TAP_MAP_LMR;
+		else if (strcmp(str, "lrm") == 0)
+			map = LIBINPUT_CONFIG_TAP_MAP_LRM;
+		else
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Invalid TapButtonMap: %s\n",
+				    str);
+		free(str);
+	}
+
+	if (libinput_device_config_send_events_set_mode(device, map) !=
+	    LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to set Tapping Drag Lock to %d\n",
+			    map);
+		map = libinput_device_config_tap_get_button_map(device);
+	}
+
+	return map;
+}
+
 static inline double
 xf86libinput_parse_accel_option(InputInfoPtr pInfo,
 				struct libinput_device *device)
@@ -2350,6 +2403,7 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	options->tapping = xf86libinput_parse_tap_option(pInfo, device);
 	options->tap_drag = xf86libinput_parse_tap_drag_option(pInfo, device);
 	options->tap_drag_lock = xf86libinput_parse_tap_drag_lock_option(pInfo, device);
+	options->tap_button_map = xf86libinput_parse_tap_buttonmap_option(pInfo, device);
 	options->speed = xf86libinput_parse_accel_option(pInfo, device);
 	options->accel_profile = xf86libinput_parse_accel_profile_option(pInfo, device);
 	options->natural_scrolling = xf86libinput_parse_natscroll_option(pInfo, device);
@@ -2780,6 +2834,8 @@ static Atom prop_tap_drag;
 static Atom prop_tap_drag_default;
 static Atom prop_tap_drag_lock;
 static Atom prop_tap_drag_lock_default;
+static Atom prop_tap_buttonmap;
+static Atom prop_tap_buttonmap_default;
 static Atom prop_calibration;
 static Atom prop_calibration_default;
 static Atom prop_accel;
@@ -2978,6 +3034,39 @@ LibinputSetPropertyTapDragLock(DeviceIntPtr dev,
 	} else {
 		driver_data->options.tap_drag_lock = *data;
 	}
+
+	return Success;
+}
+
+static inline int
+LibinputSetPropertyTapButtonmap(DeviceIntPtr dev,
+				Atom atom,
+				XIPropertyValuePtr val,
+				BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	BOOL* data;
+	enum libinput_config_tap_button_map map;
+
+	if (val->format != 8 || val->size != 2 || val->type != XA_INTEGER)
+		return BadMatch;
+
+	data = (BOOL*)val->data;
+
+	if (checkonly &&
+	    ((data[0] && data[1]) || (!data[0] && !data[1])))
+		return BadValue;
+
+	if (data[0])
+		map = LIBINPUT_CONFIG_TAP_MAP_LRM;
+	else if (data[1])
+		map = LIBINPUT_CONFIG_TAP_MAP_LMR;
+	else
+		return BadValue;
+
+	if (!checkonly)
+		driver_data->options.tap_button_map = map;
 
 	return Success;
 }
@@ -3525,6 +3614,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyTapDrag(dev, atom, val, checkonly);
 	else if (atom == prop_tap_drag_lock)
 		rc = LibinputSetPropertyTapDragLock(dev, atom, val, checkonly);
+	else if (atom == prop_tap_buttonmap)
+		rc = LibinputSetPropertyTapButtonmap(dev, atom, val, checkonly);
 	else if (atom == prop_calibration)
 		rc = LibinputSetPropertyCalibration(dev, atom, val,
 						    checkonly);
@@ -3567,6 +3658,7 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
 		 atom == prop_tap_drag_lock_default ||
+		 atom == prop_tap_buttonmap_default ||
 		 atom == prop_calibration_default ||
 		 atom == prop_accel_default ||
 		 atom == prop_accel_profile_default ||
@@ -3690,6 +3782,57 @@ LibinputInitTapDragLockProperty(DeviceIntPtr dev,
 							  LIBINPUT_PROP_TAP_DRAG_LOCK_DEFAULT,
 							  XA_INTEGER, 8,
 							  1, &drag_lock);
+}
+
+static void
+LibinputInitTapButtonmapProperty(DeviceIntPtr dev,
+				 struct xf86libinput *driver_data,
+				 struct libinput_device *device)
+{
+	enum libinput_config_tap_button_map map;
+	BOOL data[2] = {0};
+
+	map = driver_data->options.tap_button_map;
+
+	if (libinput_device_config_tap_get_finger_count(device) == 0)
+		return;
+
+	switch (map) {
+	case LIBINPUT_CONFIG_TAP_MAP_LRM:
+		data[0] = 1;
+		break;
+	case LIBINPUT_CONFIG_TAP_MAP_LMR:
+		data[1] = 1;
+		break;
+	default:
+		break;
+	}
+
+	prop_tap_buttonmap = LibinputMakeProperty(dev,
+						  LIBINPUT_PROP_TAP_BUTTONMAP,
+						  XA_INTEGER, 8,
+						  2, data);
+	if (!prop_tap_buttonmap)
+		return;
+
+	map = libinput_device_config_tap_get_default_button_map(device);
+	memset(data, 0, sizeof(data));
+
+	switch (map) {
+	case LIBINPUT_CONFIG_TAP_MAP_LRM:
+		data[0] = 1;
+		break;
+	case LIBINPUT_CONFIG_TAP_MAP_LMR:
+		data[1] = 1;
+		break;
+	default:
+		break;
+	}
+
+	prop_tap_buttonmap_default = LibinputMakeProperty(dev,
+							  LIBINPUT_PROP_TAP_BUTTONMAP_DEFAULT,
+							  XA_INTEGER, 8,
+							  2, data);
 }
 
 static void
@@ -4344,6 +4487,7 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitTapProperty(dev, driver_data, device);
 	LibinputInitTapDragProperty(dev, driver_data, device);
 	LibinputInitTapDragLockProperty(dev, driver_data, device);
+	LibinputInitTapButtonmapProperty(dev, driver_data, device);
 	LibinputInitCalibrationProperty(dev, driver_data, device);
 	LibinputInitAccelProperty(dev, driver_data, device);
 	LibinputInitNaturalScrollProperty(dev, driver_data, device);
