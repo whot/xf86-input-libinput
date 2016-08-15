@@ -214,6 +214,19 @@ btn_xorg2linux(unsigned int b)
 	return button;
 }
 
+static BOOL
+xf86libinput_is_subdevice(InputInfoPtr pInfo)
+{
+	char *source;
+	BOOL is_subdevice;
+
+	source = xf86SetStrOption(pInfo->options, "_source", "");
+	is_subdevice = strcmp(source, "_driver/libinput") == 0;
+	free(source);
+
+	return is_subdevice;
+}
+
 static inline InputInfoPtr
 xf86libinput_get_parent(InputInfoPtr pInfo)
 {
@@ -228,7 +241,7 @@ xf86libinput_get_parent(InputInfoPtr pInfo)
 		int id = xf86CheckIntOption(parent->options,
 					    "_libinput/shared-device",
 					    -1);
-		if (id == parent_id)
+		if (id == parent_id && !xf86libinput_is_subdevice(parent))
 			return parent;
 	}
 
@@ -2471,19 +2484,6 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo,
 		return xf86libinput_hotplug_device(hotplug);
 
 	return NULL;
-}
-
-static BOOL
-xf86libinput_is_subdevice(InputInfoPtr pInfo)
-{
-	char *source;
-	BOOL is_subdevice;
-
-	source = xf86SetStrOption(pInfo->options, "_source", "");
-	is_subdevice = strcmp(source, "_driver/libinput") == 0;
-	free(source);
-
-	return is_subdevice;
 }
 
 static inline uint32_t
