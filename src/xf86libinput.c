@@ -102,6 +102,16 @@ struct xf86libinput_device {
 	struct xorg_list unclaimed_tablet_tool_list;
 };
 
+struct xf86libinput_tablet_tool_queued_event {
+	struct xorg_list node;
+	struct libinput_event_tablet_tool *event;
+};
+
+struct xf86libinput_tablet_tool_event_queue {
+	bool need_to_queue;
+	struct xorg_list event_list;
+};
+
 struct xf86libinput_tablet_tool {
 	struct xorg_list node;
 	struct libinput_tablet_tool *tool;
@@ -165,19 +175,21 @@ struct xf86libinput {
 	bool allow_mode_group_updates;
 };
 
-enum hotplug_when {
-	HOTPLUG_LATER,
-	HOTPLUG_NOW,
+enum event_handling {
+	EVENT_QUEUED,
+	EVENT_HANDLED,
 };
 
-static DeviceIntPtr
+static void
 xf86libinput_create_subdevice(InputInfoPtr pInfo,
 			      uint32_t capabilities,
-			      enum hotplug_when,
 			      XF86OptionPtr extra_opts);
 static inline void
 update_mode_prop(InputInfoPtr pInfo,
 		 struct libinput_event_tablet_pad *event);
+
+static enum event_handling
+xf86libinput_handle_event(struct libinput_event *event);
 
 static inline int
 use_server_fd(const InputInfoPtr pInfo) {
@@ -1412,11 +1424,99 @@ xf86libinput_pick_device(struct xf86libinput_device *shared_device,
 }
 
 static void
+xf86libinput_tool_destroy_queued_event(struct xf86libinput_tablet_tool_queued_event *qe)
+{
+	struct libinput_event *e;
+
+	e = libinput_event_tablet_tool_get_base_event(qe->event);
+	libinput_event_destroy(e);
+	xorg_list_del(&qe->node);
+	free(qe);
+}
+
+static void
+xf86libinput_tool_replay_events(struct xf86libinput_tablet_tool_event_queue *queue)
+{
+	struct xf86libinput_tablet_tool_queued_event *qe, *tmp;
+
+	xorg_list_for_each_entry_safe(qe, tmp, &queue->event_list, node) {
+		struct libinput_event *e;
+
+		e = libinput_event_tablet_tool_get_base_event(qe->event);
+		xf86libinput_handle_event(e);
+		xf86libinput_tool_destroy_queued_event(qe);
+	}
+}
+
+static bool
+xf86libinput_tool_queue_event(struct libinput_event_tablet_tool *event)
+{
+	struct libinput_event *e;
+	struct libinput_tablet_tool *tool;
+	struct xf86libinput_tablet_tool_event_queue *queue;
+	struct xf86libinput_tablet_tool_queued_event *qe;
+
+	tool = libinput_event_tablet_tool_get_tool(event);
+	if (!tool)
+		return true;
+
+	queue = libinput_tablet_tool_get_user_data(tool);
+	if (!queue)
+		return false;
+
+	if (!queue->need_to_queue) {
+		if (!xorg_list_is_empty(&queue->event_list)) {
+			libinput_tablet_tool_set_user_data(tool, NULL);
+			xf86libinput_tool_replay_events(queue);
+			free(queue);
+		}
+
+		return false;
+	}
+
+	/* We got the prox out while still queuing, just ditch the whole
+	 * series of events and the event queue with it. */
+	if (libinput_event_tablet_tool_get_proximity_state(event) ==
+	    LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_OUT) {
+		struct xf86libinput_tablet_tool_queued_event *tmp;
+
+		xorg_list_for_each_entry_safe(qe, tmp, &queue->event_list, node)
+			xf86libinput_tool_destroy_queued_event(qe);
+
+		libinput_tablet_tool_set_user_data(tool, NULL);
+		free(queue);
+
+		/* we destroy the event here but return true
+		 * to make sure the event looks like it got queued and the
+		 * caller doesn't destroy it for us
+		 */
+		e = libinput_event_tablet_tool_get_base_event(event);
+		libinput_event_destroy(e);
+		return true;
+	}
+
+	qe = calloc(1, sizeof(*qe));
+	if (!qe) {
+		e = libinput_event_tablet_tool_get_base_event(event);
+		libinput_event_destroy(e);
+		return true;
+	}
+
+	qe->event = event;
+	xorg_list_append(&qe->node, &queue->event_list);
+
+	return true;
+}
+
+static enum event_handling
 xf86libinput_handle_tablet_tip(InputInfoPtr pInfo,
 			       struct libinput_event_tablet_tool *event)
 {
 	enum libinput_tablet_tool_tip_state state;
 	const BOOL is_absolute = TRUE;
+
+	if (xf86libinput_tool_queue_event(event))
+		return EVENT_QUEUED;
 
 	state = libinput_event_tablet_tool_get_tip_state(event);
 
@@ -1424,14 +1524,19 @@ xf86libinput_handle_tablet_tip(InputInfoPtr pInfo,
 			     is_absolute, 1,
 			     state == LIBINPUT_TABLET_TOOL_TIP_DOWN ? 1 : 0,
 			     0, 0, NULL);
+
+	return EVENT_HANDLED;
 }
 
-static void
+static enum event_handling
 xf86libinput_handle_tablet_button(InputInfoPtr pInfo,
 				  struct libinput_event_tablet_tool *event)
 {
 	enum libinput_button_state state;
 	uint32_t button, b;
+
+	if (xf86libinput_tool_queue_event(event))
+		return EVENT_QUEUED;
 
 	button = libinput_event_tablet_tool_get_button(event);
 	state = libinput_event_tablet_tool_get_button_state(event);
@@ -1443,9 +1548,11 @@ xf86libinput_handle_tablet_button(InputInfoPtr pInfo,
 			     b,
 			     state == LIBINPUT_BUTTON_STATE_PRESSED ? 1 : 0,
 			     0, 0, NULL);
+
+	return EVENT_HANDLED;
 }
 
-static void
+static enum event_handling
 xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 				struct libinput_event_tablet_tool *event)
 {
@@ -1454,6 +1561,9 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 	ValuatorMask *mask = driver_data->valuators;
 	struct libinput_tablet_tool *tool;
 	double value;
+
+	if (xf86libinput_tool_queue_event(event))
+		return EVENT_QUEUED;
 
 	value = libinput_event_tablet_tool_get_x_transformed(event,
 							TABLET_AXIS_MAX);
@@ -1502,13 +1612,15 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 		default:
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Invalid rotation axis on tool\n");
-			return;
+			return EVENT_HANDLED;
 		}
 
 		valuator_mask_set_double(mask, valuator, value);
 	}
 
 	xf86PostMotionEventM(dev, Absolute, mask);
+
+	return EVENT_HANDLED;
 }
 
 static inline const char *
@@ -1532,46 +1644,34 @@ tool_type_to_str(enum libinput_tablet_tool_type type)
 	return str;
 }
 
-static void
-xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
-				     struct libinput_event_tablet_tool *event)
+static inline void
+xf86libinput_create_tool_subdevice(InputInfoPtr pInfo,
+				   struct libinput_event_tablet_tool *event)
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
-	struct xf86libinput *dev = pInfo->private;
-	struct libinput_tablet_tool *tool;
 	struct xf86libinput_tablet_tool *t;
+	struct xf86libinput_tablet_tool_event_queue *queue;
+	struct libinput_tablet_tool *tool;
 	uint64_t serial, tool_id;
 	XF86OptionPtr options = NULL;
-	DeviceIntPtr pDev = pInfo->dev;
 	char name[64];
-	ValuatorMask *mask = driver_data->valuators;
-	double x, y;
-	BOOL in_prox;
-
-	x = libinput_event_tablet_tool_get_x_transformed(event, TABLET_AXIS_MAX);
-	y = libinput_event_tablet_tool_get_y_transformed(event, TABLET_AXIS_MAX);
-	valuator_mask_set_double(mask, 0, x);
-	valuator_mask_set_double(mask, 1, y);
-
-	tool = libinput_event_tablet_tool_get_tool(event);
-	serial = libinput_tablet_tool_get_serial(tool);
-	tool_id = libinput_tablet_tool_get_tool_id(tool);
-
-	xorg_list_for_each_entry(dev,
-				 &shared_device->device_list,
-				 shared_device_link) {
-		if (dev->tablet_tool &&
-		    libinput_tablet_tool_get_serial(dev->tablet_tool) == serial &&
-		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id) {
-			pDev = dev->pInfo->dev;
-			goto out;
-		}
-	}
 
 	t = calloc(1, sizeof *t);
 	if (!t)
 		return;
+
+	queue = calloc(1, sizeof(*queue));
+	if (!queue) {
+		free(t);
+		return;
+	}
+	queue->need_to_queue = true;
+	xorg_list_init(&queue->event_list);
+
+	tool = libinput_event_tablet_tool_get_tool(event);
+	serial = libinput_tablet_tool_get_serial(tool);
+	tool_id = libinput_tablet_tool_get_tool_id(tool);
 
 	t->tool = libinput_tablet_tool_ref(tool);
 	xorg_list_append(&t->node, &shared_device->unclaimed_tablet_tool_list);
@@ -1587,12 +1687,70 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 		     (uint32_t)serial) > strlen(pInfo->name))
 		options = xf86ReplaceStrOption(options, "Name", name);
 
-	pDev = xf86libinput_create_subdevice(pInfo, CAP_TABLET_TOOL, HOTPLUG_NOW, options);
+	libinput_tablet_tool_set_user_data(tool, queue);
+	xf86libinput_tool_queue_event(event);
 
-out:
+	xf86libinput_create_subdevice(pInfo, CAP_TABLET_TOOL, options);
+}
+
+static inline DeviceIntPtr
+xf86libinput_find_device_for_tool(InputInfoPtr pInfo,
+				  struct libinput_tablet_tool *tool)
+{
+	struct xf86libinput *dev = pInfo->private;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct xf86libinput_device *shared_device = driver_data->shared_device;
+	uint64_t serial = libinput_tablet_tool_get_serial(tool);
+	uint64_t tool_id = libinput_tablet_tool_get_tool_id(tool);
+
+	xorg_list_for_each_entry(dev,
+				 &shared_device->device_list,
+				 shared_device_link) {
+		if (dev->tablet_tool &&
+		    libinput_tablet_tool_get_serial(dev->tablet_tool) == serial &&
+		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id) {
+			return dev->pInfo->dev;
+		}
+	}
+
+	return NULL;
+}
+
+static enum event_handling
+xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
+				     struct libinput_event_tablet_tool *event)
+{
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_tablet_tool *tool;
+	DeviceIntPtr pDev;
+	ValuatorMask *mask = driver_data->valuators;
+	double x, y;
+	BOOL in_prox;
+
+	tool = libinput_event_tablet_tool_get_tool(event);
+	pDev = xf86libinput_find_device_for_tool(pInfo, tool);
+
 	in_prox = libinput_event_tablet_tool_get_proximity_state(event) ==
 				LIBINPUT_TABLET_TOOL_PROXIMITY_STATE_IN;
+
+	if (pDev == NULL && in_prox) {
+		xf86libinput_create_tool_subdevice(pInfo, event);
+		return EVENT_QUEUED;
+	}
+
+	if (xf86libinput_tool_queue_event(event))
+		return EVENT_QUEUED;
+
+	BUG_RETURN_VAL(pDev == NULL, EVENT_HANDLED);
+
+	x = libinput_event_tablet_tool_get_x_transformed(event, TABLET_AXIS_MAX);
+	y = libinput_event_tablet_tool_get_y_transformed(event, TABLET_AXIS_MAX);
+	valuator_mask_set_double(mask, 0, x);
+	valuator_mask_set_double(mask, 1, y);
+
 	xf86PostProximityEventM(pDev, in_prox, mask);
+
+	return EVENT_HANDLED;
 }
 
 static void
@@ -1671,12 +1829,13 @@ xf86libinput_handle_tablet_pad_ring(InputInfoPtr pInfo,
 	xf86PostMotionEventM(dev, Absolute, mask);
 }
 
-static void
+static enum event_handling
 xf86libinput_handle_event(struct libinput_event *event)
 {
 	struct libinput_device *device;
 	enum libinput_event_type type;
 	InputInfoPtr pInfo;
+	enum event_handling event_handling = EVENT_HANDLED;
 
 	type = libinput_event_get_type(event);
 	device = libinput_event_get_device(event);
@@ -1684,7 +1843,7 @@ xf86libinput_handle_event(struct libinput_event *event)
 					 event);
 
 	if (!pInfo || !pInfo->dev->public.on)
-		return;
+		goto out;
 
 	switch (type) {
 		case LIBINPUT_EVENT_NONE:
@@ -1730,19 +1889,19 @@ xf86libinput_handle_event(struct libinput_event *event)
 		case LIBINPUT_EVENT_GESTURE_PINCH_END:
 			break;
 		case LIBINPUT_EVENT_TABLET_TOOL_AXIS:
-			xf86libinput_handle_tablet_axis(pInfo,
+			event_handling = xf86libinput_handle_tablet_axis(pInfo,
 							libinput_event_get_tablet_tool_event(event));
 			break;
 		case LIBINPUT_EVENT_TABLET_TOOL_BUTTON:
-			xf86libinput_handle_tablet_button(pInfo,
+			event_handling = xf86libinput_handle_tablet_button(pInfo,
 							  libinput_event_get_tablet_tool_event(event));
 			break;
 		case LIBINPUT_EVENT_TABLET_TOOL_PROXIMITY:
-			xf86libinput_handle_tablet_proximity(pInfo,
+			event_handling = xf86libinput_handle_tablet_proximity(pInfo,
 							     libinput_event_get_tablet_tool_event(event));
 			break;
 		case LIBINPUT_EVENT_TABLET_TOOL_TIP:
-			xf86libinput_handle_tablet_tip(pInfo,
+			event_handling = xf86libinput_handle_tablet_tip(pInfo,
 						       libinput_event_get_tablet_tool_event(event));
 			break;
 		case LIBINPUT_EVENT_TABLET_PAD_BUTTON:
@@ -1758,6 +1917,9 @@ xf86libinput_handle_event(struct libinput_event *event)
 							     libinput_event_get_tablet_pad_event(event));
 			break;
 	}
+
+out:
+	return event_handling;
 }
 
 static void
@@ -1779,8 +1941,8 @@ xf86libinput_read_input(InputInfoPtr pInfo)
 	}
 
 	while ((event = libinput_get_event(libinput))) {
-		xf86libinput_handle_event(event);
-		libinput_event_destroy(event);
+		if (xf86libinput_handle_event(event) == EVENT_HANDLED)
+			libinput_event_destroy(event);
 	}
 }
 
@@ -2526,10 +2688,9 @@ xf86libinput_hotplug_device_cb(ClientPtr client, pointer closure)
 	return TRUE;
 }
 
-static DeviceIntPtr
+static void
 xf86libinput_create_subdevice(InputInfoPtr pInfo,
 			      uint32_t capabilities,
-			      enum hotplug_when when,
 			      XF86OptionPtr extra_options)
 {
 	struct xf86libinput *driver_data = pInfo->private;
@@ -2570,18 +2731,14 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo,
 
 	hotplug = calloc(1, sizeof(*hotplug));
 	if (!hotplug)
-		return NULL;
+		return;
 
 	hotplug->input_options = iopts;
 	hotplug->attrs = DuplicateInputAttributes(pInfo->attrs);
 
 	xf86IDrvMsg(pInfo, X_INFO, "needs a virtual subdevice\n");
-	if (when == HOTPLUG_LATER)
-		QueueWorkProc(xf86libinput_hotplug_device_cb, serverClient, hotplug);
-	else
-		return xf86libinput_hotplug_device(hotplug);
 
-	return NULL;
+	QueueWorkProc(xf86libinput_hotplug_device_cb, serverClient, hotplug);
 }
 
 static inline uint32_t
@@ -2606,6 +2763,7 @@ claim_tablet_tool(InputInfoPtr pInfo)
 {
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
+	struct xf86libinput_tablet_tool_event_queue *queue;
 	struct xf86libinput_tablet_tool *t;
 	uint64_t serial, tool_id;
 
@@ -2618,6 +2776,9 @@ claim_tablet_tool(InputInfoPtr pInfo)
 		if (libinput_tablet_tool_get_serial(t->tool) == serial &&
 		    libinput_tablet_tool_get_tool_id(t->tool) == tool_id) {
 			driver_data->tablet_tool = t->tool;
+			queue = libinput_tablet_tool_get_user_data(t->tool);
+			if (queue)
+				queue->need_to_queue = false;
 			xorg_list_del(&t->node);
 			free(t);
 			return TRUE;
@@ -2749,7 +2910,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 		driver_data->capabilities &= ~CAP_KEYBOARD;
 		xf86libinput_create_subdevice(pInfo,
 					      CAP_KEYBOARD,
-					      HOTPLUG_LATER,
 					      NULL);
 	}
 
