@@ -1261,7 +1261,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	if (libinput_event_pointer_has_axis(event, axis)) {
 		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *=  driver_data->scroll.vdist;
+			value *= driver_data->scroll.vdist;
 		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
 		}
@@ -1275,7 +1275,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	if (libinput_event_pointer_has_axis(event, axis)) {
 		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
 			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *=  driver_data->scroll.hdist;
+			value *= driver_data->scroll.hdist;
 		} else {
 			value = libinput_event_pointer_get_axis_value(event, axis);
 		}
