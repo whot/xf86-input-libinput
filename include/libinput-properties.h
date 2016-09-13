@@ -147,7 +147,7 @@
 
 /* Horizontal scroll events enabled: BOOL, 1 value (0 or 1).
  * If disabled, horizontal scroll events are discarded */
-#define LIBINPUT_PROP_HORIZ_SCROLL_ENABLED "libinput Horizonal Scroll Enabled"
+#define LIBINPUT_PROP_HORIZ_SCROLL_ENABLED "libinput Horizontal Scroll Enabled"
 
 /* Number of modes each pad mode group has available: CARD8, one for each
  * pad mode group, read-only.
