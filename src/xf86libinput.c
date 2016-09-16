@@ -4537,7 +4537,7 @@ LibinputInitModeGroupProperties(DeviceIntPtr dev,
 	nstrips = libinput_device_tablet_pad_get_num_strips(device);
 	if (nstrips) {
 		for (s = 0; s < nstrips; s++) {
-			associations[r] = -1;
+			associations[s] = -1;
 			for (g = 0; g < ngroups; g++) {
 				group = libinput_device_tablet_pad_get_mode_group(device, g);
 				if (libinput_tablet_pad_mode_group_has_strip(group, s)) {
