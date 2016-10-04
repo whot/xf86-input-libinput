@@ -3454,34 +3454,35 @@ LibinputSetPropertyScrollMethods(DeviceIntPtr dev,
 	struct xf86libinput *driver_data = pInfo->private;
 	struct libinput_device *device = driver_data->shared_device->device;
 	BOOL* data;
-	uint32_t modes = 0;
+	uint32_t mode = 0;
 
 	if (val->format != 8 || val->size != 3 || val->type != XA_INTEGER)
 		return BadMatch;
 
 	data = (BOOL*)val->data;
 
+	/* mode must be a single method */
 	if (data[0])
-		modes |= LIBINPUT_CONFIG_SCROLL_2FG;
-	if (data[1])
-		modes |= LIBINPUT_CONFIG_SCROLL_EDGE;
-	if (data[2])
-		modes |= LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
+		mode |= LIBINPUT_CONFIG_SCROLL_2FG;
+	else if (data[1])
+		mode |= LIBINPUT_CONFIG_SCROLL_EDGE;
+	else if (data[2])
+		mode |= LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN;
 
 	if (checkonly) {
 		uint32_t supported;
 
-		if (__builtin_popcount(modes) > 1)
+		if (__builtin_popcount(mode) > 1)
 			return BadValue;
 
 		if (!xf86libinput_check_device (dev, atom))
 			return BadMatch;
 
 		supported = libinput_device_config_scroll_get_methods(device);
-		if (modes && (modes & supported) == 0)
+		if (mode && (mode & supported) == 0)
 			return BadValue;
 	} else {
-		driver_data->options.scroll_method = modes;
+		driver_data->options.scroll_method = mode;
 	}
 
 	return Success;
