@@ -2146,10 +2146,10 @@ xf86libinput_parse_tap_buttonmap_option(InputInfoPtr pInfo,
 		free(str);
 	}
 
-	if (libinput_device_config_send_events_set_mode(device, map) !=
+	if (libinput_device_config_tap_set_button_map(device, map) !=
 	    LIBINPUT_CONFIG_STATUS_SUCCESS) {
 		xf86IDrvMsg(pInfo, X_ERROR,
-			    "Failed to set Tapping Drag Lock to %d\n",
+			    "Failed to set Tapping Button Map to %d\n",
 			    map);
 		map = libinput_device_config_tap_get_button_map(device);
 	}
