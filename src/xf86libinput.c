@@ -87,6 +87,7 @@
 struct xf86libinput_driver {
 	struct libinput *libinput;
 	int device_enabled_count;
+	void *registered_InputInfoPtr;
 };
 
 static struct xf86libinput_driver driver_context;
@@ -583,6 +584,7 @@ xf86libinput_on(DeviceIntPtr dev)
 	if (driver_context.device_enabled_count == 0) {
 #if HAVE_THREADED_INPUT
 		xf86AddEnabledDevice(pInfo);
+		driver_context.registered_InputInfoPtr = pInfo;
 #else
 		/* Can't use xf86AddEnabledDevice on an epollfd */
 		AddEnabledDevice(pInfo->fd);
@@ -1131,12 +1133,56 @@ xf86libinput_init(DeviceIntPtr dev)
 	return 0;
 }
 
+static bool
+is_libinput_device(InputInfoPtr pInfo)
+{
+	char *driver;
+	BOOL rc;
+
+	driver = xf86CheckStrOption(pInfo->options, "driver", "");
+	rc = strcmp(driver, "libinput") == 0;
+	free(driver);
+
+	return rc;
+}
+
+static void
+swap_registered_device(InputInfoPtr pInfo)
+{
+	InputInfoPtr next;
+
+	if (pInfo != driver_context.registered_InputInfoPtr)
+		return;
+
+	next = xf86FirstLocalDevice();
+	while (next == pInfo || !is_libinput_device(next))
+		next = next->next;
+
+	input_lock();
+	xf86RemoveEnabledDevice(pInfo);
+	if (next) /* shouldn't ever be NULL anyway */
+		xf86AddEnabledDevice(next);
+	driver_context.registered_InputInfoPtr = next;
+	input_unlock();
+}
+
 static void
 xf86libinput_destroy(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
+
+	/* If the device being destroyed is the one we used for
+	 * xf86AddEnabledDevice(), we need to swap it out for one that is
+	 * still live. xf86AddEnabledDevice() buffers some data and once the
+	 * deletes pInfo (when DEVICE_OFF completes) the thread will keep
+	 * calling that struct's read_input because we never removed it.
+	 * Avoid this by removing ours and substituting one that's still
+	 * valid, the fd is the same anyway (libinput's epollfd).
+	 */
+	if (driver_context.device_enabled_count > 0)
+		swap_registered_device(pInfo);
 
 	xorg_list_del(&driver_data->shared_device_link);
 
