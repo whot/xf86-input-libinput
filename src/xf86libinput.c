@@ -126,8 +126,6 @@ struct xf86libinput {
 	struct {
 		int vdist;
 		int hdist;
-		int vdist_remainder;
-		int hdist_remainder;
 	} scroll;
 
 	struct {
