@@ -2968,10 +2968,12 @@ xf86libinput_pre_init(InputDriverPtr drv,
 
 	return Success;
 fail:
-	if (driver_data->valuators)
-		valuator_mask_free(&driver_data->valuators);
-	if (driver_data->valuators_unaccelerated)
-		valuator_mask_free(&driver_data->valuators_unaccelerated);
+	if (driver_data) {
+		if (driver_data->valuators)
+			valuator_mask_free(&driver_data->valuators);
+		if (driver_data->valuators_unaccelerated)
+			valuator_mask_free(&driver_data->valuators_unaccelerated);
+	}
 	free(path);
 	if (shared_device)
 		xf86libinput_shared_unref(shared_device);
