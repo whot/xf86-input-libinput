@@ -4653,6 +4653,9 @@ LibinputInitHorizScrollProperty(DeviceIntPtr dev,
 {
 	BOOL enabled = driver_data->options.horiz_scrolling_enabled;
 
+	if ((driver_data->capabilities & CAP_POINTER) == 0)
+		return;
+
 	prop_horiz_scroll = LibinputMakeProperty(dev,
 						 LIBINPUT_PROP_HORIZ_SCROLL_ENABLED,
 						 XA_INTEGER, 8,
