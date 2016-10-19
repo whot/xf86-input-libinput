@@ -1158,12 +1158,20 @@ swap_registered_device(InputInfoPtr pInfo)
 	while (next == pInfo || !is_libinput_device(next))
 		next = next->next;
 
+#if HAVE_THREADED_INPUT
 	input_lock();
+#else
+	int sigstate = xf86BlockSIGIO();
+#endif
 	xf86RemoveEnabledDevice(pInfo);
 	if (next) /* shouldn't ever be NULL anyway */
 		xf86AddEnabledDevice(next);
 	driver_context.registered_InputInfoPtr = next;
+#if HAVE_THREADED_INPUT
 	input_unlock();
+#else
+	xf86UnblockSIGIO(sigstate);
+#endif
 }
 
 static void
