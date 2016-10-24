@@ -35,6 +35,8 @@ struct bezier_control_point {
 	double x, y;
 };
 
+extern const struct bezier_control_point bezier_defaults[4];
+
 /**
  * Given four control points in the range [(0.0/0.0), (1.0/1.0)]
  * construct a Bézier curve.

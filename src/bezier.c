@@ -31,6 +31,13 @@
 
 #include "bezier.h"
 
+const struct bezier_control_point bezier_defaults[4] = {
+	{ 0.0, 0.0 },
+	{ 0.0, 0.0 },
+	{ 1.0, 1.0 },
+	{ 1.0, 1.0 },
+};
+
 struct point {
 	int x, y;
 };

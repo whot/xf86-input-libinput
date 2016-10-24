@@ -42,6 +42,7 @@
 
 #include <X11/Xatom.h>
 
+#include "bezier.h"
 #include "draglock.h"
 #include "libinput-properties.h"
 
@@ -165,6 +166,7 @@ struct xf86libinput {
 		BOOL horiz_scrolling_enabled;
 
 		float rotation_angle;
+		struct bezier_control_point pressurecurve[4];
 	} options;
 
 	struct draglock draglock;
@@ -175,6 +177,13 @@ struct xf86libinput {
 	struct libinput_tablet_tool *tablet_tool;
 
 	bool allow_mode_group_updates;
+
+	/* Pre-calculated pressure curve.
+	   In the 0...TABLET_AXIS_MAX range */
+	struct {
+		int *values;
+		size_t sz;
+	} pressurecurve;
 };
 
 enum event_handling {
@@ -383,6 +392,30 @@ static inline bool
 xf86libinput_shared_is_enabled(struct xf86libinput_device *shared_device)
 {
 	return shared_device->enabled_count > 0;
+}
+
+static inline bool
+xf86libinput_set_pressurecurve(struct xf86libinput *driver_data,
+			       const struct bezier_control_point controls[4])
+{
+	if (memcmp(controls, bezier_defaults, sizeof(bezier_defaults)) == 0) {
+		free(driver_data->pressurecurve.values);
+		driver_data->pressurecurve.values = NULL;
+		return true;
+	}
+
+	if (!driver_data->pressurecurve.values) {
+		int *vals = calloc(TABLET_PRESSURE_AXIS_MAX + 1, sizeof(int));
+		if (!vals)
+			return false;
+
+		driver_data->pressurecurve.values = vals;
+		driver_data->pressurecurve.sz = TABLET_PRESSURE_AXIS_MAX + 1;
+	}
+
+	return cubic_bezier(controls,
+			    driver_data->pressurecurve.values,
+			    driver_data->pressurecurve.sz);
 }
 
 static int
@@ -1707,8 +1740,9 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 	tool = libinput_event_tablet_tool_get_tool(event);
 
 	if (libinput_tablet_tool_has_pressure(tool)) {
-		value = libinput_event_tablet_tool_get_pressure(event);
-		value *= TABLET_PRESSURE_AXIS_MAX;
+		value = TABLET_PRESSURE_AXIS_MAX * libinput_event_tablet_tool_get_pressure(event);
+		if (driver_data->pressurecurve.values)
+			value = driver_data->pressurecurve.values[(int)value];
 		valuator_mask_set_double(mask, 2, value);
 	}
 
@@ -2690,6 +2724,69 @@ xf86libinput_parse_rotation_angle_option(InputInfoPtr pInfo,
 }
 
 static void
+xf86libinput_parse_pressurecurve_option(InputInfoPtr pInfo,
+					struct xf86libinput *driver_data,
+					struct bezier_control_point pcurve[4])
+{
+	struct bezier_control_point controls[4] = {
+		{ 0.0, 0.0 },
+		{ 0.0, 0.0 },
+		{ 1.0, 1.0 },
+		{ 1.0, 1.0 },
+	};
+	float points[8];
+	char *str;
+	int rc = 0;
+	int test_bezier[64];
+	struct libinput_tablet_tool *tool = driver_data->tablet_tool;
+
+	if ((driver_data->capabilities & CAP_TABLET_TOOL) == 0)
+		return;
+
+	if (!tool || !libinput_tablet_tool_has_pressure(tool))
+		return;
+
+	str = xf86SetStrOption(pInfo->options,
+			       "TabletToolPressureCurve",
+			       NULL);
+	if (!str)
+		goto out;
+
+	rc = sscanf(str, "%f/%f %f/%f %f/%f %f/%f",
+		    &points[0], &points[1], &points[2], &points[3],
+		    &points[4], &points[5], &points[6], &points[7]);
+	if (rc != 8)
+		goto out;
+
+	for (int i = 0; i < 4; i++) {
+		if (points[i] < 0.0 || points[i] > 1.0)
+			goto out;
+	}
+
+	controls[0].x = points[0];
+	controls[0].y = points[1];
+	controls[1].x = points[2];
+	controls[1].y = points[3];
+	controls[2].x = points[4];
+	controls[2].y = points[5];
+	controls[3].x = points[6];
+	controls[3].y = points[7];
+
+	if (!cubic_bezier(controls, test_bezier, ARRAY_SIZE(test_bezier))) {
+		memcpy(controls, bezier_defaults, sizeof(controls));
+		goto out;
+	}
+
+	rc = 0;
+out:
+	if (rc != 0)
+		xf86IDrvMsg(pInfo, X_ERROR, "Invalid pressure curve: %s\n",  str);
+	free(str);
+	memcpy(pcurve, controls, sizeof(controls));
+	xf86libinput_set_pressurecurve(driver_data, controls);
+}
+
+static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
 			   struct libinput_device *device)
@@ -2722,6 +2819,10 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 		xf86libinput_parse_draglock_option(pInfo, driver_data);
 		options->horiz_scrolling_enabled = xf86libinput_parse_horiz_scroll_option(pInfo);
 	}
+
+	xf86libinput_parse_pressurecurve_option(pInfo,
+						driver_data,
+						options->pressurecurve);
 }
 
 static const char*
@@ -3180,6 +3281,7 @@ static Atom prop_rotation_angle_default;
 /* driver properties */
 static Atom prop_draglock;
 static Atom prop_horiz_scroll;
+static Atom prop_pressurecurve;
 
 /* general properties */
 static Atom prop_float;
@@ -3930,6 +4032,52 @@ LibinputSetPropertyRotationAngle(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyPressureCurve(DeviceIntPtr dev,
+				 Atom atom,
+				 XIPropertyValuePtr val,
+				 BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	float *vals;
+	struct bezier_control_point controls[4];
+
+	if (val->format != 32 || val->size != 8 || val->type != prop_float)
+		return BadMatch;
+
+	vals = val->data;
+	controls[0].x = vals[0];
+	controls[0].y = vals[1];
+	controls[1].x = vals[2];
+	controls[1].y = vals[3];
+	controls[2].x = vals[4];
+	controls[2].y = vals[5];
+	controls[3].x = vals[6];
+	controls[3].y = vals[7];
+
+	if (checkonly) {
+		int test_bezier[64];
+
+		for (int i = 0; i < val->size; i++) {
+			if (vals[i] < 0.0 || vals[i] > 1.0)
+				return BadValue;
+		}
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+
+		if (!cubic_bezier(controls, test_bezier, ARRAY_SIZE(test_bezier)))
+			return BadValue;
+	} else {
+		xf86libinput_set_pressurecurve(driver_data, controls);
+		memcpy(driver_data->options.pressurecurve, controls,
+		       sizeof(controls));
+	}
+
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -3982,6 +4130,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 	}
 	else if (atom == prop_rotation_angle)
 		rc = LibinputSetPropertyRotationAngle(dev, atom, val, checkonly);
+	else if (atom == prop_pressurecurve)
+		rc = LibinputSetPropertyPressureCurve(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
@@ -4807,6 +4957,35 @@ LibinputInitRotationAngleProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitPressureCurveProperty(DeviceIntPtr dev,
+				  struct xf86libinput *driver_data)
+{
+	const struct bezier_control_point *curve = driver_data->options.pressurecurve;
+	struct libinput_tablet_tool *tool = driver_data->tablet_tool;
+	float data[8];
+
+	if ((driver_data->capabilities & CAP_TABLET_TOOL) == 0)
+		return;
+
+	if (!tool || !libinput_tablet_tool_has_pressure(tool))
+		return;
+
+	data[0] = curve[0].x;
+	data[1] = curve[0].y;
+	data[2] = curve[1].x;
+	data[3] = curve[1].y;
+	data[4] = curve[2].x;
+	data[5] = curve[2].y;
+	data[6] = curve[3].x;
+	data[7] = curve[3].y;
+
+	prop_pressurecurve = LibinputMakeProperty(dev,
+						  LIBINPUT_PROP_TABLET_TOOL_PRESSURECURVE,
+						  prop_float, 32,
+						  8, data);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -4862,4 +5041,5 @@ LibinputInitProperty(DeviceIntPtr dev)
 
 	LibinputInitDragLockProperty(dev, driver_data);
 	LibinputInitHorizScrollProperty(dev, driver_data);
+	LibinputInitPressureCurveProperty(dev, driver_data);
 }

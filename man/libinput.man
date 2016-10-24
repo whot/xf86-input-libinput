@@ -155,6 +155,12 @@ default scroll option for this device is used.
 Sets the send events mode to disabled, enabled, or "disable when an external
 mouse is connected".
 .TP 7
+.BI "Option \*qTabletToolPressureCurve\*q \*q" "x0/y0 x1/y1 x2/y2 x3/y3" \*q
+Set the pressure curve for a tablet stylus to the bezier formed by the four
+points. The respective x/y coordinate must be in the [0.0, 1.0] range. For
+more information see section
+.B TABLET STYLUS PRESSURE CURVE.
+.TP 7
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
 .TP 7
@@ -252,6 +258,11 @@ on this device.
 "disabled-on-external-mouse". Indicates which send-event modes is currently
 enabled on this device.
 .TP 7
+.BI "libinput Tablet Tool Pressurecurve"
+4 32-bit float values [0.0 to 1.0]. See section
+.B TABLET TOOL PRESSURE CURVE
+for more information.
+.TP 7
 .BI "libinput Tapping Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables tapping
 .TP 7
@@ -310,6 +321,25 @@ If in "pairs" mode, each button can be assigned a target locking button.
 On button click, the target lock button is held logically down until the
 next click of the same button. The button events themselves are discarded
 and only the target button events are sent.
+.TP
+This feature is provided by this driver, not by libinput.
+
+.SH TABLET TOOL PRESSURECURVE
+The pressure curve affects how stylus pressure is reported. By default, the
+hardware pressure is reported as-is. By setting a pressure curve, the feel
+of the stylus can be adjusted to be more like e.g. a pencil or a brush.
+.PP
+The pressure curve is a cubic Bezier curve, drawn within a normalized range
+of 0.0 to 1.0 between the four points provided. This normalized range is
+applied to the tablet's pressure input so that the highest pressure maps to
+1.0. The points must have increasing x coordinates, if x0 is larger than 0.0
+all pressure values lower than x0 are equivalent to y0. If x3 is less than
+1.0, all pressure values higher than x3  are equivalent to y3.
+
+The input for a linear  curve  (default) is  "0.0/0.0 0.0/0.0 1.0/1.0 1.0/1.0";
+a slightly
+depressed curve (firmer) might be "0.0/0.0 0.05/0.0 1.0/0.95 1.0/1.0"; a slightly raised
+curve (softer) might  be "0.0/0.0 0.0/0.05 0.95/1.0 1.0/1.0".
 .TP
 This feature is provided by this driver, not by libinput.
 
