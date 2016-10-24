@@ -183,4 +183,11 @@
 /* Device rotation: FLOAT, 1 value, 32 bit, read-only */
 #define LIBINPUT_PROP_ROTATION_ANGLE_DEFAULT "libinput Rotation Angle Default"
 
+/* Tablet tool pressure curve: float, 8 values, 32 bit
+ * Value range is [0.0, 1.0], the values specify the x/y of the four
+ * control points for a cubic bezier curve.
+ * Default value: 0.0 0.0 0.0 0.0 1.0 1.0 1.0 1.0
+ */
+#define LIBINPUT_PROP_TABLET_TOOL_PRESSURECURVE "libinput Tablet Tool Pressurecurve"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */
