@@ -41,15 +41,6 @@ The following driver
 .B Options
 are supported:
 .TP 7
-.BI "Option \*qDevice\*q \*q" string \*q
-Specifies the device through which the device can be accessed.  This will 
-generally be of the form \*q/dev/input/eventX\*q, where X is some integer.
-When using
-.B InputClass
-directives, this option is set by the server.
-The mapping from device node to hardware is system-dependent. Property:
-"Device Node" (read-only).
-.TP 7
 .BI "Option \*qAccelProfile\*q \*q" string \*q
 Sets the pointer acceleration profile to the given profile. Permitted values
 are
@@ -89,71 +80,18 @@ Enables a click method. Permitted values are
 Not all devices support all methods, if an option is unsupported, the
 default click method for this device is used.
 .TP 7
-.BI "Option \*qLeftHanded\*q \*q" bool \*q
-Enables left-handed button orientation, i.e. swapping left and right buttons.
-.TP 7
-.BI "Option \*qMiddleEmulation\*q \*q" bool \*q
-Enables middle button emulation. When enabled, pressing the left and right
-buttons simultaneously produces a middle mouse button click.
-.TP 7
-.BI "Option \*qNaturalScrolling\*q \*q" bool \*q
-Enables or disables natural scrolling behavior.
-.TP 7
-.BI "Option \*qScrollButton\*q \*q" int \*q
-Designates a button as scroll button. If the
-.BI ScrollMethod
-is
-.BI button
-and the button is logically held down, x/y axis movement is converted into
-scroll events.
-.TP 7
-.BI "Option \*qScrollMethod\*q \*q" string \*q
-Enables a scroll method. Permitted values are
-.BI none,
-.BI twofinger,
-.BI edge,
-.BI button.
-Not all devices support all options, if an option is unsupported, the
-default scroll option for this device is used.
-.TP 7
-.BI "Option \*qHorizontalScrolling\*q \*q" bool \*q
-Disables horizontal scrolling. When disabled, this driver will discard any
-horizontal scroll events from libinput. Note that this does not disable
-horizontal scrolling, it merely discards the horizontal axis from any scroll
-events.
-.TP 7
-.BI "Option \*qSendEventsMode\*q \*q" (disabled|enabled|disabled-on-external-mouse) \*q
-Sets the send events mode to disabled, enabled, or "disable when an external
-mouse is connected".
-.TP 7
-.BI "Option \*qRotationAngle\*q \*q" float \*q
-Sets the rotation angle of the device to the given angle, in degrees
-clockwise. The angle must be between 0.0 (inclusive) and 360.0 (exclusive).
-.TP 7
-.BI "Option \*qTapping\*q \*q" bool \*q
-Enables or disables tap-to-click behavior.
-.TP 7
-.BI "Option \*qTappingButtonMap\*q \*q" (lrm|lmr) \*q
-Set the button mapping for 1/2/3-finger taps to left/right/middle or
-left/middle/right, respectively.
-.TP 7
-.BI "Option \*qTappingDrag\*q \*q" bool \*q
-Enables or disables drag during tapping behavior ("tap-and-drag"). When
-enabled, a tap followed by a finger held down causes a single button down
-only, all motions of that finger thus translate into dragging motion.
-Tap-and-drag requires option
-.B Tapping
-to be enabled.
-.TP 7
-.BI "Option \*qTappingDragLock\*q \*q" bool \*q
-Enables or disables drag lock during tapping behavior. When enabled, a
-finger up during tap-and-drag will not immediately release the button. If
-the finger is set down again within the timeout, the dragging process
-continues.
-.TP 7
 .BI "Option \*qDisableWhileTyping\*q \*q" bool \*q
 Indicates if the touchpad should be disabled while typing on the keyboard
 (this does not apply to modifier keys such as Ctrl or Alt).
+.TP 7
+.BI "Option \*qDevice\*q \*q" string \*q
+Specifies the device through which the device can be accessed.  This will
+generally be of the form \*q/dev/input/eventX\*q, where X is some integer.
+When using
+.B InputClass
+directives, this option is set by the server.
+The mapping from device node to hardware is system-dependent. Property:
+"Device Node" (read-only).
 .TP 7
 .BI "Option \*qDragLockButtons\*q \*q" "L1 B1 L2 B2 ..." \*q
 Sets "drag lock buttons" that simulate a button logically down even when it has
@@ -175,6 +113,68 @@ For both meta and button pair configuration, the button numbers are
 device button numbers, i.e. the
 .B ButtonMapping
 applies after drag lock.
+.TP 7
+.BI "Option \*qHorizontalScrolling\*q \*q" bool \*q
+Disables horizontal scrolling. When disabled, this driver will discard any
+horizontal scroll events from libinput. Note that this does not disable
+horizontal scrolling, it merely discards the horizontal axis from any scroll
+events.
+.TP 7
+.BI "Option \*qLeftHanded\*q \*q" bool \*q
+Enables left-handed button orientation, i.e. swapping left and right buttons.
+.TP 7
+.BI "Option \*qMiddleEmulation\*q \*q" bool \*q
+Enables middle button emulation. When enabled, pressing the left and right
+buttons simultaneously produces a middle mouse button click.
+.TP 7
+.BI "Option \*qNaturalScrolling\*q \*q" bool \*q
+Enables or disables natural scrolling behavior.
+.TP 7
+.BI "Option \*qRotationAngle\*q \*q" float \*q
+Sets the rotation angle of the device to the given angle, in degrees
+clockwise. The angle must be between 0.0 (inclusive) and 360.0 (exclusive).
+.TP 7
+.BI "Option \*qScrollButton\*q \*q" int \*q
+Designates a button as scroll button. If the
+.BI ScrollMethod
+is
+.BI button
+and the button is logically held down, x/y axis movement is converted into
+scroll events.
+.TP 7
+.BI "Option \*qScrollMethod\*q \*q" string \*q
+Enables a scroll method. Permitted values are
+.BI none,
+.BI twofinger,
+.BI edge,
+.BI button.
+Not all devices support all options, if an option is unsupported, the
+default scroll option for this device is used.
+.TP 7
+.BI "Option \*qSendEventsMode\*q \*q" (disabled|enabled|disabled-on-external-mouse) \*q
+Sets the send events mode to disabled, enabled, or "disable when an external
+mouse is connected".
+.TP 7
+.BI "Option \*qTapping\*q \*q" bool \*q
+Enables or disables tap-to-click behavior.
+.TP 7
+.BI "Option \*qTappingButtonMap\*q \*q" (lrm|lmr) \*q
+Set the button mapping for 1/2/3-finger taps to left/right/middle or
+left/middle/right, respectively.
+.TP 7
+.BI "Option \*qTappingDrag\*q \*q" bool \*q
+Enables or disables drag during tapping behavior ("tap-and-drag"). When
+enabled, a tap followed by a finger held down causes a single button down
+only, all motions of that finger thus translate into dragging motion.
+Tap-and-drag requires option
+.B Tapping
+to be enabled.
+.TP 7
+.BI "Option \*qTappingDragLock\*q \*q" bool \*q
+Enables or disables drag lock during tapping behavior. When enabled, a
+finger up during tap-and-drag will not immediately release the button. If
+the finger is set down again within the timeout, the dragging process
+continues.
 .PP
 For all options, the options are only parsed if the device supports that
 configuration option. For all options, the default value is the one used by
@@ -189,25 +189,58 @@ on the device. The following properties are provided by the
 .B libinput
 driver.
 .TP 7
-.BI "libinput Tapping Enabled"
-1 boolean value (8 bit, 0 or 1). 1 enables tapping
+.BI "libinput Accel Speed"
+1 32-bit float value, defines the pointer speed. Value range -1, 1
 .TP 7
-.BI "libinput Tapping Button Mapping Enabled"
-2 boolean value (8 bit, 0 or 1), in order "lrm" and "lmr". Indicates which
-button mapping is currently enabled on this device.
-.TP 7
-.BI "libinput Tapping Drag Lock Enabled"
-1 boolean value (8 bit, 0 or 1). 1 enables drag lock during tapping
+.BI "libinput Button Scrolling Button"
+1 32-bit value. Sets the button number to use for button scrolling. This
+setting is independent of the scroll method, to enable button scrolling the
+method must be set to button-scrolling and a valid button must be set.
 .TP 7
 .BI "libinput Calibration Matrix"
 9 32-bit float values, representing a 3x3 calibration matrix, order is row
 1, row 2, row 3
 .TP 7
-.BI "libinput Accel Speed"
-1 32-bit float value, defines the pointer speed. Value range -1, 1
+.BI "libinput Click Methods Available"
+2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
+Indicates which click methods are available on this device.
+.TP 7
+.BI "libinput Click Methods Enabled"
+2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
+Indicates which click methods are enabled on this device.
+.TP 7
+.BI "libinput Drag Lock Buttons"
+Either one 8-bit value specifying the meta drag lock button, or a list of
+button pairs. See section
+.B BUTTON DRAG LOCK
+for details.
+.TP 7
+.BI "libinput Horizontal Scrolling Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates whether horizontal scrolling
+events are enabled or not.
+.TP 7
+.BI "libinput Left Handed Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates if left-handed mode is enabled or
+disabled.
+.TP 7
+.BI "libinput Middle Emulation Enabled"
+1 boolean value (8 bit, 0 or 1). Indicates if middle emulation is enabled or
+disabled.
 .TP 7
 .BI "libinput Natural Scrolling Enabled"
 1 boolean value (8 bit, 0 or 1). 1 enables natural scrolling
+.TP 7
+.BI "libinput Rotation Angle"
+1 32-bit float value [0.0 to 360.0). Sets the rotation angle of the device,
+clockwise of its natural neutral position.
+.TP 7
+.BI "libinput Scroll Methods Available"
+3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
+Indicates which scroll methods are available on this device.
+.TP 7
+.BI "libinput Scroll Method Enabled"
+3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
+Indicates which scroll method is currently enabled on this device.
 .TP 7
 .BI "libinput Send Events Modes Available"
 2 boolean values (8 bit, 0 or 1), in order "disabled" and
@@ -219,56 +252,23 @@ on this device.
 "disabled-on-external-mouse". Indicates which send-event modes is currently
 enabled on this device.
 .TP 7
-.BI "libinput Left Handed Enabled"
-1 boolean value (8 bit, 0 or 1). Indicates if left-handed mode is enabled or
-disabled.
+.BI "libinput Tapping Enabled"
+1 boolean value (8 bit, 0 or 1). 1 enables tapping
 .TP 7
-.BI "libinput Scroll Methods Available"
-3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
-Indicates which scroll methods are available on this device.
+.BI "libinput Tapping Button Mapping Enabled"
+2 boolean value (8 bit, 0 or 1), in order "lrm" and "lmr". Indicates which
+button mapping is currently enabled on this device.
 .TP 7
-.BI "libinput Scroll Method Enabled"
-3 boolean values (8 bit, 0 or 1), in order "two-finger", "edge", "button".
-Indicates which scroll method is currently enabled on this device.
-.TP 7
-.BI "libinput Button Scrolling Button"
-1 32-bit value. Sets the button number to use for button scrolling. This
-setting is independent of the scroll method, to enable button scrolling the
-method must be set to button-scrolling and a valid button must be set.
-.TP 7
-.BI "libinput Click Methods Available"
-2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
-Indicates which click methods are available on this device.
-.TP 7
-.BI "libinput Click Methods Enabled"
-2 boolean values (8 bit, 0 or 1), in order "buttonareas", "clickfinger".
-Indicates which click methods are enabled on this device.
-.TP 7
-.BI "libinput Middle Emulation Enabled"
-1 boolean value (8 bit, 0 or 1). Indicates if middle emulation is enabled or
-disabled.
+.BI "libinput Tapping Drag Lock Enabled"
+1 boolean value (8 bit, 0 or 1). 1 enables drag lock during tapping
 .TP 7
 .BI "libinput Disable While Typing Enabled"
 1 boolean value (8 bit, 0 or 1). Indicates if disable while typing is
 enabled or disabled.
-.TP 7
-.BI "libinput Rotation Angle"
-1 32-bit float value [0.0 to 360.0). Sets the rotation angle of the device,
-clockwise of its natural neutral position.
 .PP
-The above properties have a
+Most properties have a
 .BI "libinput <property name> Default"
 equivalent that indicates the default value for this setting on this device.
-.TP 7
-.BI "libinput Drag Lock Buttons"
-Either one 8-bit value specifying the meta drag lock button, or a list of
-button pairs. See section
-.B BUTTON DRAG LOCK
-for details.
-.TP 7
-.BI "libinput Horizontal Scrolling Enabled"
-1 boolean value (8 bit, 0 or 1). Indicates whether horizontal scrolling
-events are enabled or not.
 
 .SH BUTTON MAPPING
 X clients receive events with logical button numbers, where 1, 2, 3
