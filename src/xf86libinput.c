@@ -4092,7 +4092,8 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 	enum libinput_config_accel_profile profile;
 	BOOL profiles[2] = {FALSE};
 
-	if (!libinput_device_config_accel_is_available(device))
+	if (!libinput_device_config_accel_is_available(device) ||
+	    driver_data->capabilities & CAP_TABLET)
 		return;
 
 	prop_accel = LibinputMakeProperty(dev,
@@ -4260,7 +4261,8 @@ LibinputInitLeftHandedProperty(DeviceIntPtr dev,
 {
 	BOOL left_handed = driver_data->options.left_handed;
 
-	if (!libinput_device_config_left_handed_is_available(device))
+	if (!libinput_device_config_left_handed_is_available(device) ||
+	    driver_data->capabilities & CAP_TABLET)
 		return;
 
 	prop_left_handed = LibinputMakeProperty(dev,
