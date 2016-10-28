@@ -190,4 +190,7 @@
  */
 #define LIBINPUT_PROP_TABLET_TOOL_PRESSURECURVE "libinput Tablet Tool Pressurecurve"
 
+/* Tablet tool area ratio: CARD32, 2 values, w and h */
+#define LIBINPUT_PROP_TABLET_TOOL_AREA_RATIO "libinput Tablet Tool Area Ratio"
+
 #endif /* _LIBINPUT_PROPERTIES_H_ */

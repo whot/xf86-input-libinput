@@ -164,6 +164,9 @@ struct xf86libinput {
 
 		float rotation_angle;
 		struct bezier_control_point pressurecurve[4];
+		struct ratio {
+			int width, height;
+		} area;
 	} options;
 
 	struct draglock draglock;
@@ -181,6 +184,10 @@ struct xf86libinput {
 		int *values;
 		size_t sz;
 	} pressurecurve;
+
+	struct scale_factor {
+		double x, y;
+	} area_scale_factor;
 };
 
 enum event_handling {
@@ -413,6 +420,29 @@ xf86libinput_set_pressurecurve(struct xf86libinput *driver_data,
 	return cubic_bezier(controls,
 			    driver_data->pressurecurve.values,
 			    driver_data->pressurecurve.sz);
+}
+
+static inline void
+xf86libinput_set_area_ratio(struct xf86libinput *driver_data,
+			    const struct ratio *ratio)
+{
+	double f;
+	double w, h;
+
+	if (libinput_device_get_size(driver_data->shared_device->device, &w, &h) != 0)
+		return;
+
+	f = 1.0 * (ratio->width * h)/(ratio->height * w);
+
+	if (f <= 1.0) {
+		driver_data->area_scale_factor.x = 1.0/f;
+		driver_data->area_scale_factor.y = 1.0;
+	} else {
+		driver_data->area_scale_factor.x = 1.0;
+		driver_data->area_scale_factor.y = f;
+	}
+
+	driver_data->options.area = *ratio;
 }
 
 static int
@@ -1636,6 +1666,26 @@ xf86libinput_handle_tablet_button(InputInfoPtr pInfo,
 	return EVENT_HANDLED;
 }
 
+static void
+xf86libinput_apply_area(InputInfoPtr pInfo, double *x, double *y)
+{
+	struct xf86libinput *driver_data = pInfo->private;
+	const struct scale_factor *f = &driver_data->area_scale_factor;
+	double sx, sy;
+
+	if (driver_data->options.area.width == 0)
+		return;
+
+	/* In left-handed mode, libinput already gives us transformed
+	 * coordinates, so we can clip the same way. */
+
+	sx = min(*x * f->x, TABLET_AXIS_MAX);
+	sy = min(*y * f->y, TABLET_AXIS_MAX);
+
+	*x = sx;
+	*y = sy;
+}
+
 static enum event_handling
 xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 				struct libinput_event_tablet_tool *event)
@@ -1645,16 +1695,18 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 	ValuatorMask *mask = driver_data->valuators;
 	struct libinput_tablet_tool *tool;
 	double value;
+	double x, y;
 
 	if (xf86libinput_tool_queue_event(event))
 		return EVENT_QUEUED;
 
-	value = libinput_event_tablet_tool_get_x_transformed(event,
-							TABLET_AXIS_MAX);
-	valuator_mask_set_double(mask, 0, value);
-	value = libinput_event_tablet_tool_get_y_transformed(event,
-							TABLET_AXIS_MAX);
-	valuator_mask_set_double(mask, 1, value);
+	x = libinput_event_tablet_tool_get_x_transformed(event,
+							 TABLET_AXIS_MAX);
+	y = libinput_event_tablet_tool_get_y_transformed(event,
+							 TABLET_AXIS_MAX);
+	xf86libinput_apply_area(pInfo, &x, &y);
+	valuator_mask_set_double(mask, 0, x);
+	valuator_mask_set_double(mask, 1, y);
 
 	tool = libinput_event_tablet_tool_get_tool(event);
 
@@ -2703,6 +2755,37 @@ out:
 }
 
 static void
+xf86libinput_parse_tablet_area_option(InputInfoPtr pInfo,
+				      struct xf86libinput *driver_data,
+				      struct ratio *area_out)
+{
+	char *str;
+	int rc;
+	struct ratio area;
+
+	if ((driver_data->capabilities & CAP_TABLET_TOOL) == 0)
+		return;
+
+	str = xf86SetStrOption(pInfo->options,
+			       "TabletToolAreaRatio",
+			       NULL);
+	if (!str || strcmp(str, "default") == 0)
+		goto out;
+
+	rc = sscanf(str, "%d:%d", &area.width, &area.height);
+	if (rc != 2 || area.width <= 0 || area.height <= 0)
+		goto error;
+
+out:
+	free(str);
+	return;
+
+error:
+	xf86IDrvMsg(pInfo, X_ERROR, "Invalid tablet tool area ratio: %s\n",  str);
+	free(str);
+}
+
+static void
 xf86libinput_parse_options(InputInfoPtr pInfo,
 			   struct xf86libinput *driver_data,
 			   struct libinput_device *device)
@@ -2739,6 +2822,9 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	xf86libinput_parse_pressurecurve_option(pInfo,
 						driver_data,
 						options->pressurecurve);
+	xf86libinput_parse_tablet_area_option(pInfo,
+					      driver_data,
+					      &options->area);
 }
 
 static const char*
@@ -3188,6 +3274,7 @@ static Atom prop_rotation_angle_default;
 static Atom prop_draglock;
 static Atom prop_horiz_scroll;
 static Atom prop_pressurecurve;
+static Atom prop_area_ratio;
 
 /* general properties */
 static Atom prop_float;
@@ -3963,6 +4050,41 @@ LibinputSetPropertyPressureCurve(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyAreaRatio(DeviceIntPtr dev,
+			     Atom atom,
+			     XIPropertyValuePtr val,
+			     BOOL checkonly)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	uint32_t *vals;
+	struct ratio area = { 0, 0 };
+
+	if (val->format != 32 || val->size != 2 || val->type != XA_CARDINAL)
+		return BadMatch;
+
+	vals = val->data;
+	area.width = vals[0];
+	area.height = vals[1];
+
+	if (checkonly) {
+		if (area.width < 0 || area.height < 0)
+			return BadValue;
+
+		if ((area.width != 0 && area.height == 0) ||
+		    (area.width == 0 && area.height != 0))
+			return BadValue;
+
+		if (!xf86libinput_check_device (dev, atom))
+			return BadMatch;
+	} else {
+		xf86libinput_set_area_ratio(driver_data, &area);
+	}
+
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -4017,6 +4139,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyRotationAngle(dev, atom, val, checkonly);
 	else if (atom == prop_pressurecurve)
 		rc = LibinputSetPropertyPressureCurve(dev, atom, val, checkonly);
+	else if (atom == prop_area_ratio)
+		rc = LibinputSetPropertyAreaRatio(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
@@ -4870,6 +4994,25 @@ LibinputInitPressureCurveProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitTabletAreaRatioProperty(DeviceIntPtr dev,
+				    struct xf86libinput *driver_data)
+{
+	const struct ratio *ratio = &driver_data->options.area;
+	uint32_t data[2];
+
+	if ((driver_data->capabilities & CAP_TABLET_TOOL) == 0)
+		return;
+
+	data[0] = ratio->width;
+	data[1] = ratio->height;
+
+	prop_area_ratio = LibinputMakeProperty(dev,
+					       LIBINPUT_PROP_TABLET_TOOL_AREA_RATIO,
+					       XA_CARDINAL, 32,
+					       2, data);
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -4926,4 +5069,5 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitDragLockProperty(dev, driver_data);
 	LibinputInitHorizScrollProperty(dev, driver_data);
 	LibinputInitPressureCurveProperty(dev, driver_data);
+	LibinputInitTabletAreaRatioProperty(dev, driver_data);
 }

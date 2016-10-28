@@ -161,6 +161,14 @@ points. The respective x/y coordinate must be in the [0.0, 1.0] range. For
 more information see section
 .B TABLET STYLUS PRESSURE CURVE.
 .TP 7
+.BI "Option \*qTabletToolAreaRatio\*q \*q" "w:h" \*q
+Sets the area ratio for a tablet tool. The area always starts at the
+origin (0/0) and expands to the largest available area with the specified
+aspect ratio. Events outside this area are cropped to the area. The special
+value "default" is used for the default mapping (i.e. the device-native
+mapping). For more information see section
+.B TABLET TOOL AREA RATIO.
+.TP 7
 .BI "Option \*qTapping\*q \*q" bool \*q
 Enables or disables tap-to-click behavior.
 .TP 7
@@ -261,6 +269,11 @@ enabled on this device.
 .BI "libinput Tablet Tool Pressurecurve"
 4 32-bit float values [0.0 to 1.0]. See section
 .B TABLET TOOL PRESSURE CURVE
+.TP7
+.BI "libinput Tablet Tool Area Ratio"
+2 32-bit values, corresponding to width and height. Special value 0, 0
+resets to the default ratio. See section
+.B TABLET TOOL AREA RATIO
 for more information.
 .TP 7
 .BI "libinput Tapping Enabled"
@@ -341,6 +354,22 @@ The input for a linear  curve  (default) is  "0.0/0.0 0.0/0.0 1.0/1.0 1.0/1.0";
 a slightly
 depressed curve (firmer) might be "0.0/0.0 0.05/0.0 1.0/0.95 1.0/1.0"; a slightly raised
 curve (softer) might  be "0.0/0.0 0.0/0.05 0.95/1.0 1.0/1.0".
+.TP
+This feature is provided by this driver, not by libinput.
+
+.SH TABLET TOOL AREA RATIO
+By default, a tablet tool can access the whole sensor area and the tablet
+area is mapped to the available screen area. For external tablets like
+the Wacom Intuos series, the height:width ratio of the tablet may be
+different to that of the monitor, causing the skew of input data.
+.PP
+To avoid this skew of input data, an area ratio may be set to match the
+ratio of the screen device. For example, a ratio of 4:3 will reduce the
+available area of the tablet to the largest available area with a ratio of
+4:3. Any events outside this area will send events equal to the maximum
+value of that axis. The area always starts at the device's origin in it's
+current rotation, i.e. it takes left-handed-ness into account.
+
 .TP
 This feature is provided by this driver, not by libinput.
 
