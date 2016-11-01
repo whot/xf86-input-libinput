@@ -2331,6 +2331,7 @@ xf86libinput_parse_calibration_option(InputInfoPtr pInfo,
 {
 	char *str;
 	float matrix[9] = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0};
+	int num_calibration;
 
 	memcpy(matrix_out, matrix, sizeof(matrix));
 
@@ -2340,27 +2341,29 @@ xf86libinput_parse_calibration_option(InputInfoPtr pInfo,
 	libinput_device_config_calibration_get_matrix(device, matrix);
 	memcpy(matrix_out, matrix, sizeof(matrix));
 
-	if ((str = xf86CheckStrOption(pInfo->options,
-				      "CalibrationMatrix",
-				      NULL))) {
-		int num_calibration = sscanf(str, "%f %f %f %f %f %f %f %f %f ",
-					     &matrix[0], &matrix[1],
-					     &matrix[2], &matrix[3],
-					     &matrix[4], &matrix[5],
-					     &matrix[6], &matrix[7],
-					     &matrix[8]);
-		if (num_calibration != 9) {
-			xf86IDrvMsg(pInfo, X_ERROR,
-				    "Invalid matrix: %s, using default\n",  str);
-		} else if (libinput_device_config_calibration_set_matrix(device,
-									 matrix) ==
-			   LIBINPUT_CONFIG_STATUS_SUCCESS) {
-			memcpy(matrix_out, matrix, sizeof(matrix));
-		} else
-			xf86IDrvMsg(pInfo, X_ERROR,
-				    "Failed to apply matrix: %s, using default\n",  str);
-		free(str);
-	}
+	str = xf86CheckStrOption(pInfo->options,
+				 "CalibrationMatrix",
+				 NULL);
+	if (!str)
+		return;
+
+	num_calibration = sscanf(str, "%f %f %f %f %f %f %f %f %f ",
+				 &matrix[0], &matrix[1],
+				 &matrix[2], &matrix[3],
+				 &matrix[4], &matrix[5],
+				 &matrix[6], &matrix[7],
+				 &matrix[8]);
+	if (num_calibration != 9) {
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Invalid matrix: %s, using default\n",  str);
+	} else if (libinput_device_config_calibration_set_matrix(device,
+								 matrix) ==
+		   LIBINPUT_CONFIG_STATUS_SUCCESS) {
+		memcpy(matrix_out, matrix, sizeof(matrix));
+	} else
+		xf86IDrvMsg(pInfo, X_ERROR,
+			    "Failed to apply matrix: %s, using default\n",  str);
+	free(str);
 }
 
 static inline BOOL
