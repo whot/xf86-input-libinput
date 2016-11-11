@@ -3494,7 +3494,28 @@ LibinputSetPropertyLeftHanded(DeviceIntPtr dev,
 		if (!supported && left_handed)
 			return BadValue;
 	} else {
+		struct xf86libinput *other;
+
 		driver_data->options.left_handed = *data;
+
+		xorg_list_for_each_entry(other,
+					 &driver_data->shared_device->device_list,
+					 shared_device_link) {
+			DeviceIntPtr other_device = other->pInfo->dev;
+
+			if (other->options.left_handed == *data)
+				continue;
+
+			XIChangeDeviceProperty(other_device,
+					       atom,
+					       val->type,
+					       val->format,
+					       PropModeReplace,
+					       val->size,
+					       val->data,
+					       TRUE);
+		}
+
 	}
 
 	return Success;
