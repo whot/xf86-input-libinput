@@ -2850,7 +2850,7 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	struct xf86libinput *driver_data = NULL;
 	struct xf86libinput_device *shared_device = NULL;
 	struct libinput *libinput = NULL;
-	struct libinput_device *device;
+	struct libinput_device *device = NULL;
 	char *path = NULL;
 	bool is_subdevice;
 
@@ -2885,7 +2885,28 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	}
 
 	is_subdevice = xf86libinput_is_subdevice(pInfo);
-	if (!is_subdevice) {
+	if (is_subdevice) {
+		InputInfoPtr parent;
+		struct xf86libinput *parent_driver_data;
+
+		parent = xf86libinput_get_parent(pInfo);
+		if (!parent) {
+			xf86IDrvMsg(pInfo, X_ERROR, "Failed to find parent device\n");
+			goto fail;
+		}
+
+		parent_driver_data = parent->private;
+		if (!parent_driver_data) /* parent already removed again */
+			goto fail;
+
+		xf86IDrvMsg(pInfo, X_INFO, "is a virtual subdevice\n");
+		shared_device = xf86libinput_shared_ref(parent_driver_data->shared_device);
+		device = shared_device->device;
+		if (!device)
+			xf86IDrvMsg(pInfo, X_ERROR, "Parent device not available\n");
+	}
+
+	if (!device) {
 		device = libinput_path_add_device(libinput, path);
 		if (!device) {
 			xf86IDrvMsg(pInfo, X_ERROR, "Failed to create a device for %s\n", path);
@@ -2903,23 +2924,6 @@ xf86libinput_pre_init(InputDriverPtr drv,
 			libinput_device_unref(device);
 			goto fail;
 		}
-	} else {
-		InputInfoPtr parent;
-		struct xf86libinput *parent_driver_data;
-
-		parent = xf86libinput_get_parent(pInfo);
-		if (!parent) {
-			xf86IDrvMsg(pInfo, X_ERROR, "Failed to find parent device\n");
-			goto fail;
-		}
-
-		parent_driver_data = parent->private;
-		if (!parent_driver_data) /* parent already removed again */
-			goto fail;
-
-		xf86IDrvMsg(pInfo, X_INFO, "is a virtual subdevice\n");
-		shared_device = xf86libinput_shared_ref(parent_driver_data->shared_device);
-		device = shared_device->device;
 	}
 
 	pInfo->private = driver_data;
