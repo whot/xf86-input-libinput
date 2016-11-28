@@ -2931,12 +2931,18 @@ xf86libinput_pre_init(InputDriverPtr drv,
 
 	pInfo->private = driver_data;
 	driver_data->pInfo = pInfo;
-	driver_data->scroll.vdist = 15;
-	driver_data->scroll.hdist = 15;
 	driver_data->path = path;
 	driver_data->shared_device = shared_device;
 	xorg_list_append(&driver_data->shared_device_link,
 			 &shared_device->device_list);
+
+	/* Scroll dist value matters for source finger/continuous. For those
+	 * devices libinput provides pixel-like data, changing this will
+	 * affect touchpad scroll speed. For wheels it doesn't matter as
+	 * we're using the discrete value only.
+	 */
+	driver_data->scroll.vdist = 15;
+	driver_data->scroll.hdist = 15;
 
 	if (!is_subdevice) {
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
