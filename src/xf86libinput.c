@@ -1323,6 +1323,31 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *even
 	xf86PostKeyboardEvent(dev, key, is_press);
 }
 
+static inline bool
+calculate_axis_value(struct xf86libinput *driver_data,
+		     enum libinput_pointer_axis axis,
+		     struct libinput_event_pointer *event,
+		     double *value_out)
+{
+	enum libinput_pointer_axis_source source;
+	double value;
+
+	if (!libinput_event_pointer_has_axis(event, axis))
+		return false;
+
+	source = libinput_event_pointer_get_axis_source(event);
+	if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
+		value = libinput_event_pointer_get_axis_value_discrete(event, axis);
+		value *= driver_data->scroll.vdist;
+	} else {
+		value = libinput_event_pointer_get_axis_value(event, axis);
+	}
+
+	*value_out = value;
+
+	return true;
+}
+
 static void
 xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *event)
 {
@@ -1330,7 +1355,6 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	struct xf86libinput *driver_data = pInfo->private;
 	ValuatorMask *mask = driver_data->valuators;
 	double value;
-	enum libinput_pointer_axis axis;
 	enum libinput_pointer_axis_source source;
 
 	if ((driver_data->capabilities & CAP_POINTER) == 0)
@@ -1348,30 +1372,20 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 			return;
 	}
 
-	axis = LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL;
-	if (libinput_event_pointer_has_axis(event, axis)) {
-		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
-			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *= driver_data->scroll.vdist;
-		} else {
-			value = libinput_event_pointer_get_axis_value(event, axis);
-		}
+	if (calculate_axis_value(driver_data,
+				 LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL,
+				 event,
+				 &value))
 		valuator_mask_set_double(mask, 3, value);
-	}
 
 	if (!driver_data->options.horiz_scrolling_enabled)
 		goto out;
 
-	axis = LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL;
-	if (libinput_event_pointer_has_axis(event, axis)) {
-		if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
-			value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-			value *= driver_data->scroll.hdist;
-		} else {
-			value = libinput_event_pointer_get_axis_value(event, axis);
-		}
+	if (calculate_axis_value(driver_data,
+				 LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL,
+				 event,
+				 &value))
 		valuator_mask_set_double(mask, 2, value);
-	}
 
 out:
 	xf86PostMotionEventM(dev, Relative, mask);
