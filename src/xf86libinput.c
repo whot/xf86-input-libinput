@@ -4386,6 +4386,7 @@ LibinputInitScrollMethodsProperty(DeviceIntPtr dev,
 			return;
 
 		scroll_button = libinput_device_config_scroll_get_default_button(device);
+		scroll_button = btn_linux2xorg(scroll_button);
 		prop_scroll_button_default = LibinputMakeProperty(dev,
 								  LIBINPUT_PROP_SCROLL_BUTTON_DEFAULT,
 								  XA_CARDINAL, 32,
