@@ -785,6 +785,9 @@ xf86libinput_kbd_ctrl(DeviceIntPtr device, KeybdCtrl *ctrl)
     struct xf86libinput *driver_data = pInfo->private;
     struct libinput_device *ldevice = driver_data->shared_device->device;
 
+    if (!device->enabled)
+	    return;
+
     while (bits[i].xbit) {
 	    if (ctrl->leds & bits[i].xbit)
 		    leds |= bits[i].code;
