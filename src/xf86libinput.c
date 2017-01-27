@@ -2233,13 +2233,7 @@ const struct libinput_interface interface = {
     .close_restricted = close_restricted,
 };
 
-static void
-xf86libinput_log_handler(struct libinput *libinput,
-			 enum libinput_log_priority priority,
-			 const char *format,
-			 va_list args)
-	_X_ATTRIBUTE_PRINTF(3, 0);
-
+_X_ATTRIBUTE_PRINTF(3, 0)
 static void
 xf86libinput_log_handler(struct libinput *libinput,
 			 enum libinput_log_priority priority,
