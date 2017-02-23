@@ -84,6 +84,7 @@
 #define CAP_TABLET	0x8
 #define CAP_TABLET_TOOL	0x10
 #define CAP_TABLET_PAD	0x20
+#define CAP_POINTER_ABSOLUTE	0x40
 
 struct xf86libinput_driver {
 	struct libinput *libinput;
@@ -191,6 +192,8 @@ struct xf86libinput {
 	struct scale_factor {
 		double x, y;
 	} area_scale_factor;
+
+	bool remove_on_prox_out;
 };
 
 enum event_handling {
@@ -802,6 +805,20 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 
+	/* We always initialize rel as parent on absrel devices */
+	if (xf86libinput_is_subdevice(pInfo)) {
+		/*
+		 * FIXME: well, we can't really know which buttons belong to
+		 * which device here, but adding it to both doesn't make
+		 * sense either. Options are: assume LMR is on rel, BTN_0
+		 * and friends on absolute. That's not always correct but
+		 * that's as best as we can do.
+		 *
+		 * FIXME: event routing for buttons isn't set up correctly
+		 * yet.
+		 */
+	}
+
 	for (i = BTN_BACK; i >= BTN_SIDE; i--) {
 		if (libinput_device_pointer_has_button(device, i)) {
 			nbuttons += i - BTN_SIDE + 1;
@@ -1176,13 +1193,10 @@ xf86libinput_init(DeviceIntPtr dev)
 
 	if (driver_data->capabilities & CAP_KEYBOARD)
 		xf86libinput_init_keyboard(pInfo);
-	if (driver_data->capabilities & CAP_POINTER) {
-		if (libinput_device_config_calibration_has_matrix(device) &&
-		    !libinput_device_config_accel_is_available(device))
-			xf86libinput_init_pointer_absolute(pInfo);
-		else
-			xf86libinput_init_pointer(pInfo);
-	}
+	if (driver_data->capabilities & CAP_POINTER)
+		xf86libinput_init_pointer(pInfo);
+	if (driver_data->capabilities & CAP_POINTER_ABSOLUTE)
+		xf86libinput_init_pointer_absolute(pInfo);
 	if (driver_data->capabilities & CAP_TOUCH)
 		xf86libinput_init_touch(pInfo);
 	if (driver_data->capabilities & CAP_TABLET_TOOL)
@@ -1365,7 +1379,7 @@ xf86libinput_handle_button(InputInfoPtr pInfo, struct libinput_event_pointer *ev
 	int button;
 	int is_press;
 
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
+	if ((driver_data->capabilities & (CAP_POINTER|CAP_POINTER_ABSOLUTE)) == 0)
 		return;
 
 	button = btn_linux2xorg(libinput_event_pointer_get_button(event));
@@ -1490,7 +1504,7 @@ xf86libinput_handle_axis(InputInfoPtr pInfo, struct libinput_event_pointer *even
 	double value;
 	enum libinput_pointer_axis_source source;
 
-	if ((driver_data->capabilities & CAP_POINTER) == 0)
+	if ((driver_data->capabilities & (CAP_POINTER|CAP_POINTER_ABSOLUTE)) == 0)
 		return;
 
 	valuator_mask_zero(mask);
@@ -2931,7 +2945,7 @@ xf86libinput_get_type_name(struct libinput_device *device,
 	/* now pick an actual type */
 	if (libinput_device_config_tap_get_finger_count(device) > 0)
 		type_name = XI_TOUCHPAD;
-	else if (driver_data->capabilities & CAP_TOUCH)
+	else if (driver_data->capabilities & (CAP_TOUCH|CAP_POINTER_ABSOLUTE))
 		type_name = XI_TOUCHSCREEN;
 	else if (driver_data->capabilities & CAP_POINTER)
 		type_name = XI_MOUSE;
@@ -3045,6 +3059,8 @@ xf86libinput_create_subdevice(InputInfoPtr pInfo,
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-keyboard", 1);
 	if (capabilities & CAP_POINTER)
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-pointer", 1);
+	if (capabilities & CAP_POINTER_ABSOLUTE)
+		options = xf86ReplaceBoolOption(options, "_libinput/cap-pointer-absolute", 1);
 	if (capabilities & CAP_TOUCH)
 		options = xf86ReplaceBoolOption(options, "_libinput/cap-touch", 1);
 	if (capabilities & CAP_TABLET_TOOL)
@@ -3083,6 +3099,8 @@ caps_from_options(InputInfoPtr pInfo)
 		capabilities |= CAP_KEYBOARD;
 	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-pointer", 0))
 		capabilities |= CAP_POINTER;
+	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-pointer-absolute", 0))
+		capabilities |= CAP_POINTER_ABSOLUTE;
 	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-touch", 0))
 		capabilities |= CAP_TOUCH;
 	if (xf86CheckBoolOption(pInfo->options, "_libinput/cap-tablet-tool", 0))
@@ -3221,8 +3239,13 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	driver_data->scroll.hdist = 15;
 
 	if (!is_subdevice) {
-		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
-			driver_data->capabilities |= CAP_POINTER;
+		if (libinput_device_has_capability(device,
+						   LIBINPUT_DEVICE_CAP_POINTER)) {
+			if (libinput_device_config_calibration_has_matrix(device))
+				driver_data->capabilities |= CAP_POINTER_ABSOLUTE;
+			if (libinput_device_config_accel_is_available(device))
+				driver_data->capabilities |= CAP_POINTER;
+		}
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_KEYBOARD))
 			driver_data->capabilities |= CAP_KEYBOARD;
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_TOUCH))
@@ -3245,15 +3268,26 @@ xf86libinput_pre_init(InputDriverPtr drv,
 
 	xf86libinput_parse_options(pInfo, driver_data, device);
 
-	/* Device is both keyboard and pointer. Drop the keyboard cap from
-	 * this device, create a separate device instead */
-	if (!is_subdevice &&
-	    driver_data->capabilities & CAP_KEYBOARD &&
-	    driver_data->capabilities & (CAP_POINTER|CAP_TOUCH)) {
-		driver_data->capabilities &= ~CAP_KEYBOARD;
-		xf86libinput_create_subdevice(pInfo,
-					      CAP_KEYBOARD,
-					      NULL);
+	if (!is_subdevice) {
+		/* Device is both keyboard and pointer. Drop the keyboard cap from
+		 * this device, create a separate device instead */
+		if (driver_data->capabilities & CAP_KEYBOARD &&
+		    driver_data->capabilities & (CAP_POINTER|CAP_POINTER_ABSOLUTE|CAP_TOUCH)) {
+			driver_data->capabilities &= ~CAP_KEYBOARD;
+			xf86libinput_create_subdevice(pInfo,
+						      CAP_KEYBOARD,
+						      NULL);
+		}
+		/* Device is both relative and absolute. Drop the absolute
+		 * cap from this device, create a separate device instead */
+		if (driver_data->capabilities & CAP_POINTER &&
+		    driver_data->capabilities & CAP_POINTER_ABSOLUTE) {
+			driver_data->capabilities &= ~CAP_POINTER_ABSOLUTE;
+			xf86libinput_create_subdevice(pInfo,
+						      CAP_POINTER_ABSOLUTE,
+						      NULL);
+		}
+
 	}
 
 	pInfo->type_name = xf86libinput_get_type_name(device, driver_data);
@@ -4514,7 +4548,7 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 	BOOL profiles[2] = {FALSE};
 
 	if (!libinput_device_config_accel_is_available(device) ||
-	    driver_data->capabilities & CAP_TABLET)
+	    driver_data->capabilities & (CAP_TABLET|CAP_POINTER_ABSOLUTE))
 		return;
 
 	prop_accel = LibinputMakeProperty(dev,
