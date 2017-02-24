@@ -2187,6 +2187,12 @@ open_restricted(const char *path, int flags, void *data)
 	InputInfoPtr pInfo;
 	int fd = -1;
 
+	/* Special handling for sysfs files (used for pad LEDs) */
+	if (strneq(path, "/sys/", 5)) {
+		fd = open(path, flags);
+		return fd < 0 ? -errno : fd;
+	}
+
 	nt_list_for_each_entry(pInfo, xf86FirstLocalDevice(), next) {
 		char *device = xf86CheckStrOption(pInfo->options, "Device", NULL);
 
