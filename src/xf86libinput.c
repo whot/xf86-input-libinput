@@ -3386,17 +3386,43 @@ static Atom prop_float;
 static Atom prop_device;
 static Atom prop_product_id;
 
-static inline void
-update_mode_prop(InputInfoPtr pInfo,
-		 struct libinput_event_tablet_pad *event)
-{
-	struct xf86libinput *driver_data = pInfo->private;
+struct mode_prop_state {
+	int deviceid;
+	InputInfoPtr pInfo;
+
 	struct libinput_tablet_pad_mode_group *group;
 	unsigned int mode;
 	unsigned int idx;
+};
+
+static Bool
+update_mode_prop_cb(ClientPtr client, pointer closure)
+{
+	struct mode_prop_state *state = closure;
+	InputInfoPtr pInfo = state->pInfo, tmp;
+	struct xf86libinput *driver_data = pInfo->private;
+	BOOL found = FALSE;
 	XIPropertyValuePtr val;
 	int rc;
 	unsigned char groups[4] = {0};
+	struct libinput_tablet_pad_mode_group *group = state->group;
+	unsigned int mode = state->mode;
+	unsigned int idx = state->idx;
+
+	if (idx >= ARRAY_SIZE(groups))
+		goto out;
+
+	/* The device may have gotten removed before the WorkProc was
+	 * scheduled. X reuses deviceids, but if the pointer value and
+	 * device ID are what we had before, we're good */
+	nt_list_for_each_entry(tmp, xf86FirstLocalDevice(), next) {
+		if (tmp->dev->id == state->deviceid && tmp == pInfo) {
+			found = TRUE;
+			break;
+		}
+	}
+	if (!found)
+		goto out;
 
 	rc = XIGetDeviceProperty(pInfo->dev,
 				 prop_mode_groups,
@@ -3404,18 +3430,12 @@ update_mode_prop(InputInfoPtr pInfo,
 	if (rc != Success ||
 	    val->format != 8 ||
 	    val->size <= 0)
-		return;
+		goto out;
 
 	memcpy(groups, (unsigned char*)val->data, val->size);
 
-	group = libinput_event_tablet_pad_get_mode_group(event);
-	mode = libinput_event_tablet_pad_get_mode(event);
-	idx = libinput_tablet_pad_mode_group_get_index(group);
-	if (idx >= ARRAY_SIZE(groups))
-		return;
-
 	if (groups[idx] == mode)
-		return;
+		goto out;
 
 	groups[idx] = mode;
 
@@ -3428,8 +3448,36 @@ update_mode_prop(InputInfoPtr pInfo,
 				    groups,
 				    TRUE);
 	driver_data->allow_mode_group_updates = false;
-	if (rc != Success)
+
+out:
+	libinput_tablet_pad_mode_group_unref(group);
+	free(state);
+	return TRUE;
+}
+
+static inline void
+update_mode_prop(InputInfoPtr pInfo,
+		 struct libinput_event_tablet_pad *event)
+{
+	struct libinput_tablet_pad_mode_group *group;
+	struct mode_prop_state *state;
+
+	state = calloc(1, sizeof(*state));
+	if (!state)
 		return;
+
+	state->deviceid = pInfo->dev->id;
+	state->pInfo = pInfo;
+
+	group = libinput_event_tablet_pad_get_mode_group(event);
+
+	state->group = libinput_tablet_pad_mode_group_ref(group);
+	state->mode = libinput_event_tablet_pad_get_mode(event);
+	state->idx = libinput_tablet_pad_mode_group_get_index(group);
+
+	/* Schedule a WorkProc so we don't update from within the input
+	   thread */
+	QueueWorkProc(update_mode_prop_cb, serverClient, state);
 }
 
 static inline BOOL
