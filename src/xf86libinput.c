@@ -65,6 +65,9 @@
 #define TOUCH_MAX_SLOTS 15
 #define XORG_KEYCODE_OFFSET 8
 
+#define streq(a, b) (strcmp(a, b) == 0)
+#define strneq(a, b, n) (strncmp(a, b, n) == 0)
+
 /*
    libinput does not provide axis information for absolute devices, instead
    it scales into the screen dimensions provided. So we set up the axes with
@@ -259,7 +262,7 @@ xf86libinput_is_subdevice(InputInfoPtr pInfo)
 	BOOL is_subdevice;
 
 	source = xf86SetStrOption(pInfo->options, "_source", "");
-	is_subdevice = strcmp(source, "_driver/libinput") == 0;
+	is_subdevice = streq(source, "_driver/libinput");
 	free(source);
 
 	return is_subdevice;
@@ -1213,7 +1216,7 @@ is_libinput_device(InputInfoPtr pInfo)
 	BOOL rc;
 
 	driver = xf86CheckStrOption(pInfo->options, "driver", "");
-	rc = strcmp(driver, "libinput") == 0;
+	rc = streq(driver, "libinput");
 	free(driver);
 
 	return rc;
@@ -2187,7 +2190,7 @@ open_restricted(const char *path, int flags, void *data)
 	nt_list_for_each_entry(pInfo, xf86FirstLocalDevice(), next) {
 		char *device = xf86CheckStrOption(pInfo->options, "Device", NULL);
 
-		if (device != NULL && strcmp(path, device) == 0) {
+		if (device != NULL && streq(path, device)) {
 			free(device);
 			break;
 		}
@@ -2353,9 +2356,9 @@ xf86libinput_parse_tap_buttonmap_option(InputInfoPtr pInfo,
 			       "TappingButtonMap",
 			       NULL);
 	if (str) {
-		if (strcmp(str, "lmr") == 0)
+		if (streq(str, "lmr"))
 			map = LIBINPUT_CONFIG_TAP_MAP_LMR;
-		else if (strcmp(str, "lrm") == 0)
+		else if (streq(str, "lrm"))
 			map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 		else
 			xf86IDrvMsg(pInfo, X_ERROR,
@@ -2468,11 +2471,11 @@ xf86libinput_parse_sendevents_option(InputInfoPtr pInfo,
 				   "SendEventsMode",
 				   NULL);
 	if (modestr) {
-		if (strcmp(modestr, "enabled") == 0)
+		if (streq(modestr, "enabled"))
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
-		else if (strcmp(modestr, "disabled") == 0)
+		else if (streq(modestr, "disabled"))
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED;
-		else if (strcmp(modestr, "disabled-on-external-mouse") == 0)
+		else if (streq(modestr, "disabled-on-external-mouse"))
 			mode = LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE;
 		else
 			xf86IDrvMsg(pInfo, X_ERROR,
@@ -2866,7 +2869,7 @@ xf86libinput_parse_tablet_area_option(InputInfoPtr pInfo,
 	str = xf86SetStrOption(pInfo->options,
 			       "TabletToolAreaRatio",
 			       NULL);
-	if (!str || strcmp(str, "default") == 0)
+	if (!str || streq(str, "default"))
 		goto out;
 
 	rc = sscanf(str, "%d:%d", &area.x, &area.y);
