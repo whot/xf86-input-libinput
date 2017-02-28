@@ -153,6 +153,13 @@ test_nonzero_x_linear(void)
 		assert(bezier[x] == 0);
 	} while (++x < size * 0.2 - 1);
 
+	/* ppc64le, ppc64, aarch64 have different math results at -O2,
+	   resulting in one extra zero at the beginning of the array.
+	   some other numbers are different too but within the error
+	   margin (#99992) */
+	if (bezier[x] == 0)
+		x++;
+
 	do {
 		assert(bezier[x] > bezier[x-1]);
 	} while (++x < size * 0.8 - 1);
