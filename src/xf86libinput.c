@@ -1776,8 +1776,8 @@ xf86libinput_apply_area(InputInfoPtr pInfo, double *x, double *y)
 	*y = sy;
 }
 
-static enum event_handling
-xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
+static void
+xf86libinput_post_tablet_motion(InputInfoPtr pInfo,
 				struct libinput_event_tablet_tool *event)
 {
 	DeviceIntPtr dev = pInfo->dev;
@@ -1786,9 +1786,6 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 	struct libinput_tablet_tool *tool;
 	double value;
 	double x, y;
-
-	if (xf86libinput_tool_queue_event(event))
-		return EVENT_QUEUED;
 
 	x = libinput_event_tablet_tool_get_x_transformed(event,
 							 TABLET_AXIS_MAX);
@@ -1839,13 +1836,23 @@ xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
 		default:
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Invalid rotation axis on tool\n");
-			return EVENT_HANDLED;
+			return;
 		}
 
 		valuator_mask_set_double(mask, valuator, value);
 	}
 
 	xf86PostMotionEventM(dev, Absolute, mask);
+}
+
+static enum event_handling
+xf86libinput_handle_tablet_axis(InputInfoPtr pInfo,
+				struct libinput_event_tablet_tool *event)
+{
+	if (xf86libinput_tool_queue_event(event))
+		return EVENT_QUEUED;
+
+	xf86libinput_post_tablet_motion(pInfo, event);
 
 	return EVENT_HANDLED;
 }
@@ -1976,6 +1983,13 @@ xf86libinput_handle_tablet_proximity(InputInfoPtr pInfo,
 	valuator_mask_set_double(mask, 1, y);
 
 	xf86PostProximityEventM(pDev, in_prox, mask);
+
+	/* We have to send an extra motion event after proximity to make
+	 * sure the client got the updated x/y coordinates, especially if
+	 * they don't handle proximity events (XI2).
+	 */
+	if (in_prox)
+		xf86libinput_post_tablet_motion(pDev->public.devicePrivate, event);
 
 	return EVENT_HANDLED;
 }
