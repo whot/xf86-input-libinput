@@ -203,6 +203,14 @@ on the device. The following properties are provided by the
 .B libinput
 driver.
 .TP 7
+.BI "libinput Accel Profiles Available"
+2 boolean values (8 bit, 0 or 1), in order "adaptive", "flat".
+Indicates which acceleration profiles are available on this device.
+.TP 7
+.BI "libinput Accel Profile Enabled"
+2 boolean values (8 bit, 0 or 1), in order "adaptive", "flat".
+Indicates which acceleration profile is currently enabled on this device.
+.TP 7
 .BI "libinput Accel Speed"
 1 32-bit float value, defines the pointer speed. Value range -1, 1
 .TP 7
