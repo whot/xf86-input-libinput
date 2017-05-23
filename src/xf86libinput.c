@@ -5231,6 +5231,19 @@ LibinputInitTabletAreaRatioProperty(DeviceIntPtr dev,
 					       2, data);
 }
 
+static inline bool
+subdevice_filter_for_capabilities(DeviceIntPtr dev,
+				  uint32_t capabilities)
+{
+	InputInfoPtr pInfo  = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+
+	if (!xf86libinput_is_subdevice(pInfo))
+		return false;
+
+	return !(driver_data->capabilities & capabilities);
+}
+
 static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
@@ -5243,21 +5256,35 @@ LibinputInitProperty(DeviceIntPtr dev)
 
 	prop_float = XIGetKnownProperty("FLOAT");
 
-	LibinputInitTapProperty(dev, driver_data, device);
-	LibinputInitTapDragProperty(dev, driver_data, device);
-	LibinputInitTapDragLockProperty(dev, driver_data, device);
-	LibinputInitTapButtonmapProperty(dev, driver_data, device);
-	LibinputInitCalibrationProperty(dev, driver_data, device);
-	LibinputInitAccelProperty(dev, driver_data, device);
-	LibinputInitNaturalScrollProperty(dev, driver_data, device);
+	/* On a subdevice, we likely only have a keyboard, so filter out the
+	 * properties for the capabilities we don't have */
+	if (!subdevice_filter_for_capabilities(dev, CAP_POINTER|CAP_TOUCH)) {
+		LibinputInitTapProperty(dev, driver_data, device);
+		LibinputInitTapDragProperty(dev, driver_data, device);
+		LibinputInitTapDragLockProperty(dev, driver_data, device);
+		LibinputInitTapButtonmapProperty(dev, driver_data, device);
+		LibinputInitNaturalScrollProperty(dev, driver_data, device);
+	}
+
+	if (!subdevice_filter_for_capabilities(dev, CAP_TOUCH|CAP_TABLET)) {
+		LibinputInitCalibrationProperty(dev, driver_data, device);
+		LibinputInitLeftHandedProperty(dev, driver_data, device);
+		LibinputInitAccelProperty(dev, driver_data, device);
+	}
+
+	if (!subdevice_filter_for_capabilities(dev, CAP_POINTER)) {
+		LibinputInitScrollMethodsProperty(dev, driver_data, device);
+		LibinputInitClickMethodsProperty(dev, driver_data, device);
+		LibinputInitMiddleEmulationProperty(dev, driver_data, device);
+		LibinputInitRotationAngleProperty(dev, driver_data, device);
+	}
+
+	if (!subdevice_filter_for_capabilities(dev, CAP_TABLET_PAD)) {
+		LibinputInitModeGroupProperties(dev, driver_data, device);
+	}
+
 	LibinputInitSendEventsProperty(dev, driver_data, device);
-	LibinputInitLeftHandedProperty(dev, driver_data, device);
-	LibinputInitScrollMethodsProperty(dev, driver_data, device);
-	LibinputInitClickMethodsProperty(dev, driver_data, device);
-	LibinputInitMiddleEmulationProperty(dev, driver_data, device);
 	LibinputInitDisableWhileTypingProperty(dev, driver_data, device);
-	LibinputInitModeGroupProperties(dev, driver_data, device);
-	LibinputInitRotationAngleProperty(dev, driver_data, device);
 
 	/* Device node property, read-only  */
 	device_node = driver_data->path;
