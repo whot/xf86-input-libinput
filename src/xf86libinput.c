@@ -212,6 +212,10 @@ update_mode_prop(InputInfoPtr pInfo,
 static enum event_handling
 xf86libinput_handle_event(struct libinput_event *event);
 
+static void
+xf86libinput_post_tablet_motion(InputInfoPtr pInfo,
+				struct libinput_event_tablet_tool *event);
+
 static inline int
 use_server_fd(const InputInfoPtr pInfo) {
 	return pInfo->fd > -1 && (pInfo->flags & XI86_SERVER_FD);
@@ -1716,11 +1720,14 @@ static enum event_handling
 xf86libinput_handle_tablet_tip(InputInfoPtr pInfo,
 			       struct libinput_event_tablet_tool *event)
 {
+	DeviceIntPtr pDev = pInfo->dev;
 	enum libinput_tablet_tool_tip_state state;
 	const BOOL is_absolute = TRUE;
 
 	if (xf86libinput_tool_queue_event(event))
 		return EVENT_QUEUED;
+
+	xf86libinput_post_tablet_motion(pDev->public.devicePrivate, event);
 
 	state = libinput_event_tablet_tool_get_tip_state(event);
 
