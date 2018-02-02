@@ -483,13 +483,12 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 static void
 LibinputInitProperty(DeviceIntPtr dev);
 
-static inline void
-LibinputApplyConfig(DeviceIntPtr dev)
+static void
+LibinputApplyConfigSendEvents(DeviceIntPtr dev,
+			      struct xf86libinput *driver_data,
+			      struct libinput_device *device)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
-	struct xf86libinput *driver_data = pInfo->private;
-	struct libinput_device *device = driver_data->shared_device->device;
-	unsigned int scroll_button;
 
 	if (libinput_device_config_send_events_get_modes(device) != LIBINPUT_CONFIG_SEND_EVENTS_ENABLED &&
 	    libinput_device_config_send_events_set_mode(device,
@@ -497,6 +496,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set SendEventsMode %u\n",
 			    driver_data->options.sendevents);
+}
+
+static void
+LibinputApplyConfigNaturalScroll(DeviceIntPtr dev,
+				 struct xf86libinput *driver_data,
+				 struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_scroll_has_natural_scroll(device) &&
 	    libinput_device_config_scroll_set_natural_scroll_enabled(device,
@@ -504,6 +511,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set NaturalScrolling to %d\n",
 			    driver_data->options.natural_scrolling);
+}
+
+static void
+LibinputApplyConfigAccel(DeviceIntPtr dev,
+			 struct xf86libinput *driver_data,
+			 struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_accel_is_available(device) &&
 	    libinput_device_config_accel_set_speed(device,
@@ -532,6 +547,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		}
 		xf86IDrvMsg(pInfo, X_ERROR, "Failed to set profile %s\n", profile);
 	}
+}
+
+static inline void
+LibinputApplyConfigTap(DeviceIntPtr dev,
+		       struct xf86libinput *driver_data,
+		       struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
 	    libinput_device_config_tap_set_enabled(device,
@@ -568,6 +591,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set Tapping Drag to %d\n",
 			    driver_data->options.tap_drag);
+}
+
+static void
+LibinputApplyConfigCalibration(DeviceIntPtr dev,
+			       struct xf86libinput *driver_data,
+			       struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_calibration_has_matrix(device) &&
 	    libinput_device_config_calibration_set_matrix(device,
@@ -580,6 +611,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    driver_data->options.matrix[4], driver_data->options.matrix[5],
 			    driver_data->options.matrix[6], driver_data->options.matrix[7],
 			    driver_data->options.matrix[8]);
+}
+
+static void
+LibinputApplyConfigLeftHanded(DeviceIntPtr dev,
+			       struct xf86libinput *driver_data,
+			       struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_left_handed_is_available(device) &&
 	    libinput_device_config_left_handed_set(device,
@@ -587,6 +626,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set LeftHanded to %d\n",
 			    driver_data->options.left_handed);
+}
+
+static void
+LibinputApplyConfigScrollMethod(DeviceIntPtr dev,
+				struct xf86libinput *driver_data,
+				struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_scroll_set_method(device,
 						     driver_data->options.scroll_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
@@ -607,12 +654,22 @@ LibinputApplyConfig(DeviceIntPtr dev)
 	}
 
 	if (libinput_device_config_scroll_get_methods(device) & LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN) {
+		unsigned int scroll_button;
+
 		scroll_button = btn_xorg2linux(driver_data->options.scroll_button);
 		if (libinput_device_config_scroll_set_button(device, scroll_button) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 			xf86IDrvMsg(pInfo, X_ERROR,
 				    "Failed to set ScrollButton to %u\n",
 				    driver_data->options.scroll_button);
 	}
+}
+
+static void
+LibinputApplyConfigClickMethod(DeviceIntPtr dev,
+			       struct xf86libinput *driver_data,
+			       struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_click_set_method(device,
 						    driver_data->options.click_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
@@ -630,6 +687,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 			    "Failed to set click method to %s\n",
 			    method);
 	}
+}
+
+static void
+LibinputApplyConfigMiddleEmulation(DeviceIntPtr dev,
+				   struct xf86libinput *driver_data,
+				   struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_middle_emulation_is_available(device) &&
 	    libinput_device_config_middle_emulation_set_enabled(device,
@@ -637,6 +702,14 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set MiddleEmulation to %d\n",
 			    driver_data->options.middle_emulation);
+}
+
+static void
+LibinputApplyConfigDisableWhileTyping(DeviceIntPtr dev,
+				      struct xf86libinput *driver_data,
+				      struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_dwt_is_available(device) &&
 	    libinput_device_config_dwt_set_enabled(device,
@@ -644,13 +717,40 @@ LibinputApplyConfig(DeviceIntPtr dev)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set DisableWhileTyping to %d\n",
 			    driver_data->options.disable_while_typing);
+}
+
+static void
+LibinputApplyConfigRotation(DeviceIntPtr dev,
+			    struct xf86libinput *driver_data,
+			    struct libinput_device *device)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
 
 	if (libinput_device_config_rotation_is_available(device) &&
 	    libinput_device_config_rotation_set_angle(device, driver_data->options.rotation_angle) != LIBINPUT_CONFIG_STATUS_SUCCESS)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to set RotationAngle to %.2f\n",
 			    driver_data->options.rotation_angle);
+}
 
+static inline void
+LibinputApplyConfig(DeviceIntPtr dev)
+{
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->shared_device->device;
+
+	LibinputApplyConfigSendEvents(dev, driver_data, device);
+	LibinputApplyConfigNaturalScroll(dev, driver_data, device);
+	LibinputApplyConfigAccel(dev, driver_data, device);
+	LibinputApplyConfigTap(dev, driver_data, device);
+	LibinputApplyConfigCalibration(dev, driver_data, device);
+	LibinputApplyConfigLeftHanded(dev, driver_data, device);
+	LibinputApplyConfigScrollMethod(dev, driver_data, device);
+	LibinputApplyConfigClickMethod(dev, driver_data, device);
+	LibinputApplyConfigMiddleEmulation(dev, driver_data, device);
+	LibinputApplyConfigDisableWhileTyping(dev, driver_data, device);
+	LibinputApplyConfigRotation(dev, driver_data, device);
 }
 
 static int
