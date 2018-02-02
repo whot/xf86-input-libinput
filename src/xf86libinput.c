@@ -505,6 +505,9 @@ LibinputApplyConfigNaturalScroll(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
 	if (libinput_device_config_scroll_has_natural_scroll(device) &&
 	    libinput_device_config_scroll_set_natural_scroll_enabled(device,
 								     driver_data->options.natural_scrolling) != LIBINPUT_CONFIG_STATUS_SUCCESS)
@@ -519,6 +522,9 @@ LibinputApplyConfigAccel(DeviceIntPtr dev,
 			 struct libinput_device *device)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
 
 	if (libinput_device_config_accel_is_available(device) &&
 	    libinput_device_config_accel_set_speed(device,
@@ -555,6 +561,9 @@ LibinputApplyConfigTap(DeviceIntPtr dev,
 		       struct libinput_device *device)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
 
 	if (libinput_device_config_tap_get_finger_count(device) > 0 &&
 	    libinput_device_config_tap_set_enabled(device,
@@ -600,6 +609,9 @@ LibinputApplyConfigCalibration(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_TOUCH|CAP_TABLET))
+		return;
+
 	if (libinput_device_config_calibration_has_matrix(device) &&
 	    libinput_device_config_calibration_set_matrix(device,
 							  driver_data->options.matrix) != LIBINPUT_CONFIG_STATUS_SUCCESS)
@@ -620,6 +632,9 @@ LibinputApplyConfigLeftHanded(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_POINTER|CAP_TABLET))
+		return;
+
 	if (libinput_device_config_left_handed_is_available(device) &&
 	    libinput_device_config_left_handed_set(device,
 						   driver_data->options.left_handed) != LIBINPUT_CONFIG_STATUS_SUCCESS)
@@ -634,6 +649,9 @@ LibinputApplyConfigScrollMethod(DeviceIntPtr dev,
 				struct libinput_device *device)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
 
 	if (libinput_device_config_scroll_set_method(device,
 						     driver_data->options.scroll_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
@@ -671,6 +689,9 @@ LibinputApplyConfigClickMethod(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
 	if (libinput_device_config_click_set_method(device,
 						    driver_data->options.click_method) != LIBINPUT_CONFIG_STATUS_SUCCESS) {
 		const char *method;
@@ -696,6 +717,9 @@ LibinputApplyConfigMiddleEmulation(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
 	if (libinput_device_config_middle_emulation_is_available(device) &&
 	    libinput_device_config_middle_emulation_set_enabled(device,
 								driver_data->options.middle_emulation) != LIBINPUT_CONFIG_STATUS_SUCCESS)
@@ -711,6 +735,9 @@ LibinputApplyConfigDisableWhileTyping(DeviceIntPtr dev,
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
 
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
 	if (libinput_device_config_dwt_is_available(device) &&
 	    libinput_device_config_dwt_set_enabled(device,
 						   driver_data->options.disable_while_typing) != LIBINPUT_CONFIG_STATUS_SUCCESS)
@@ -725,6 +752,9 @@ LibinputApplyConfigRotation(DeviceIntPtr dev,
 			    struct libinput_device *device)
 {
 	InputInfoPtr pInfo = dev->public.devicePrivate;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
 
 	if (libinput_device_config_rotation_is_available(device) &&
 	    libinput_device_config_rotation_set_angle(device, driver_data->options.rotation_angle) != LIBINPUT_CONFIG_STATUS_SUCCESS)
