@@ -381,6 +381,12 @@ it takes left-handed-ness into account.
 .TP
 This feature is provided by this driver, not by libinput.
 
+.SH BUGS
+This driver does not work with \fBOption \*qDevice\*q\fR set to an event
+node in \fI/dev/input/by-id\fR and \fI/dev/input/by-path\fR. This can be
+usually be worked by using \fBSection \*qInputClass\*q\fR with an
+appropriate \fBMatch*\fR statement in the __xconfigfile__(__filemansuffix__).
+
 .SH AUTHORS
 Peter Hutterer
 .SH "SEE ALSO"
