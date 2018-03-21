@@ -4930,9 +4930,6 @@ LibinputInitLeftHandedProperty(DeviceIntPtr dev,
 	if (!subdevice_has_capabilities(dev, CAP_POINTER|CAP_TABLET))
 		return;
 
-	if (prop_left_handed != 0)
-		return;
-
 	if (!libinput_device_config_left_handed_is_available(device) ||
 	    driver_data->capabilities & CAP_TABLET)
 		return;
