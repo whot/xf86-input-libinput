@@ -277,7 +277,7 @@ enabled on this device.
 .BI "libinput Tablet Tool Pressurecurve"
 4 32-bit float values [0.0 to 1.0]. See section
 .B TABLET TOOL PRESSURE CURVE
-.TP7
+.TP 7
 .BI "libinput Tablet Tool Area Ratio"
 2 32-bit values, corresponding to width and height. Special value 0, 0
 resets to the default ratio. See section
