@@ -15,11 +15,11 @@ libinput \- libinput-based X.Org input driver
 
 .SH NOTE
 This is the man page for the X input driver. If you are looking for the
-library documentation, go to 
+library documentation, go to
 .BI http://wayland.freedesktop.org/libinput/doc/
 
 .SH DESCRIPTION
-.B libinput 
+.B libinput
 is an __xservername__ input driver based on libinput.  It
 therefore supports all input devices that libinput can handle, including
 most mice, keyboards, tablets and touchscreens.
@@ -37,7 +37,7 @@ Please refer to __xconfigfile__(__filemansuffix__) for general configuration
 details and for options that can be used with all input drivers.  This
 section only covers configuration details specific to this driver.
 .PP
-The following driver 
+The following driver
 .B Options
 are supported:
 .TP 7
