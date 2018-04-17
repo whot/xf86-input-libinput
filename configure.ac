@@ -47,6 +47,23 @@ XORG_DEFAULT_OPTIONS
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto [inputproto >= 2.2])
 PKG_CHECK_MODULES(LIBINPUT, [libinput >= 1.4.901])
 
+AC_MSG_CHECKING([if libinput_device_config_accel_set_curve_point is available])
+OLD_LIBS=$LIBS
+OLD_CFLAGS=$CFLAGS
+LIBS="$LIBS $LIBINPUT_LIBS"
+CFLAGS="$CFLAGS $LIBINPUT_CFLAGS"
+AC_LINK_IFELSE(
+               [AC_LANG_PROGRAM([[#include <libinput.h>]],
+                                [[libinput_device_config_accel_set_curve_point(NULL, 0, 0)]])],
+               [AC_MSG_RESULT([yes])
+                AC_DEFINE(HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE, [1],
+                          [libinput_device_config_accel_set_curve_point() is available])
+                [libinput_have_custom_accel_curve=yes]],
+               [AC_MSG_RESULT([no])
+                [libinput_have_custom_accel_curve=no]])
+LIBS=$OLD_LIBS
+CFLAGS=$OLD_CFLAGS
+
 # Define a configure option for an alternate input module directory
 AC_ARG_WITH(xorg-module-dir,
             AC_HELP_STRING([--with-xorg-module-dir=DIR],

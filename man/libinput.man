@@ -45,10 +45,18 @@ are supported:
 Sets the pointer acceleration profile to the given profile. Permitted values
 are
 .BI adaptive,
-.BI flat.
+.BI flat,
+.BI device-speed-curve.
 Not all devices support this option or all profiles. If a profile is
 unsupported, the default profile for this device is used. For a description
 on the profiles and their behavior, see the libinput documentation.
+.TP 7
+.BI "Option \*qAccelCurvePoints\*q \*q" string \*q
+A string of space-separated pairs of floats, each pair value separated by a
+colon, i.e. the string looks like this "A:B C:D". These pairs represent the
+x/y value of a point on the acceleration curve. See
+.B CUSTOM POINTER ACCELERATION CURVES
+for details.
 .TP 7
 .BI "Option \*qAccelSpeed\*q \*q" float \*q
 Sets the pointer acceleration speed within the range [-1, 1]
@@ -204,15 +212,25 @@ on the device. The following properties are provided by the
 driver.
 .TP 7
 .BI "libinput Accel Profiles Available"
-2 boolean values (8 bit, 0 or 1), in order "adaptive", "flat".
-Indicates which acceleration profiles are available on this device.
+3 boolean values (8 bit, 0 or 1), in order "adaptive", "flat",
+"device-speed-curve". Indicates which acceleration profiles are available on
+this device.
 .TP 7
 .BI "libinput Accel Profile Enabled"
-2 boolean values (8 bit, 0 or 1), in order "adaptive", "flat".
-Indicates which acceleration profile is currently enabled on this device.
+3 boolean values (8 bit, 0 or 1), in order "adaptive", "flat",
+"device-speed-curve". Indicates which acceleration profile is currently
+enabled on this device.
 .TP 7
 .BI "libinput Accel Speed"
 1 32-bit float value, defines the pointer speed. Value range -1, 1
+.TP 7
+.BI "libinput Accel Curve Points"
+n 32-bit float values, n is a multiple of 2, each pair represents one point
+on the acceleration curve. If the acceleration profile is
+\fBdevice-speed-curve\fR, each value x is the device speed in units/ms and each
+value x+1 is the acceleration factor to apply. This property should only be
+written once per profile change, see section
+.B CUSTOM POINTER ACCELERATION CURVES
 .TP 7
 .BI "libinput Button Scrolling Button"
 1 32-bit value. Sets the button number to use for button scrolling. This
@@ -380,6 +398,31 @@ The area always starts at the device's origin in it's current rotation, i.e.
 it takes left-handed-ness into account.
 .TP
 This feature is provided by this driver, not by libinput.
+
+.SH CUSTOM POINTER ACCELERATION CURVES
+Some profiles require the acceleration curve to be provided
+by the user. These curve points must be provided as pairs in the option or
+the property and each curve point defines the x/y value of one point on the
+curve. libinput does linear interpolation between the defined points. See
+the libinput documentation for details.
+.PP
+If the  profile is
+.B device-speed-curve,
+the points represent the mapping of device speed (in device units/ms) to an
+acceleration factor, e.g. the values (50, 2) map a device speed of 50
+units/ms to an acceleration factor of 2. The current delta is then
+multiplied by that factor.
+.PP
+To apply a custom acceleration curve, first set the profile to
+.B device-speed-curve,
+then set the curve points. All curve points must be set with one property
+update. Once set, adding, removing or otherwise modifying the property
+values results in undefined behavior.
+.PP
+To reset the curve, change to a different acceleration profile, then change
+back to
+.B device-speed-curve
+before applying the new set of curve points.
 
 .SH BUGS
 This driver does not work with \fBOption \*qDevice\*q\fR set to an event

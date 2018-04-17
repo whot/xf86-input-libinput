@@ -122,6 +122,11 @@ struct xf86libinput_tablet_tool {
 	struct libinput_tablet_tool *tool;
 };
 
+struct curve_point {
+	struct xorg_list node;
+	float x, fx;
+} curve_point;
+
 struct xf86libinput {
 	InputInfoPtr pInfo;
 	char *path;
@@ -173,6 +178,8 @@ struct xf86libinput {
 		struct ratio {
 			int x, y;
 		} area;
+
+		struct xorg_list curve_points;
 	} options;
 
 	struct draglock draglock;
@@ -547,6 +554,11 @@ LibinputApplyConfigAccel(DeviceIntPtr dev,
 		case LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT:
 			profile = "flat";
 			break;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+		case LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE:
+			profile = "device-speed-curve";
+			break;
+#endif
 		default:
 			profile = "unknown";
 			break;
@@ -763,6 +775,30 @@ LibinputApplyConfigRotation(DeviceIntPtr dev,
 			    driver_data->options.rotation_angle);
 }
 
+static void
+LibinputApplyConfigAccelCurvePoints(DeviceIntPtr dev,
+				    struct xf86libinput *driver_data,
+				    struct libinput_device *device)
+{
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	struct curve_point *p;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
+	if (!libinput_device_config_accel_is_available(device))
+		return;
+
+	if (libinput_device_config_accel_get_profile(device) !=
+	    LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE)
+		return;
+
+	xorg_list_for_each_entry(p, &driver_data->options.curve_points, node) {
+		libinput_device_config_accel_set_curve_point(device, p->x, p->fx);
+	}
+#endif
+}
+
 static inline void
 LibinputApplyConfig(DeviceIntPtr dev)
 {
@@ -781,6 +817,7 @@ LibinputApplyConfig(DeviceIntPtr dev)
 	LibinputApplyConfigMiddleEmulation(dev, driver_data, device);
 	LibinputApplyConfigDisableWhileTyping(dev, driver_data, device);
 	LibinputApplyConfigRotation(dev, driver_data, device);
+	LibinputApplyConfigAccelCurvePoints(dev, driver_data, device);
 }
 
 static int
@@ -2592,6 +2629,10 @@ xf86libinput_parse_accel_profile_option(InputInfoPtr pInfo,
 		profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 	else if (strncasecmp(str, "flat", 4) == 0)
 		profile = LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	else if (strncasecmp(str, "device-speed-curve", 18) == 0)
+		profile = LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE;
+#endif
 	else {
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Unknown accel profile '%s'. Using default.\n",
@@ -2707,6 +2748,57 @@ xf86libinput_parse_calibration_option(InputInfoPtr pInfo,
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Failed to apply matrix: %s, using default\n",  str);
 	free(str);
+}
+
+static inline void
+xf86libinput_parse_accel_curve_points_options(InputInfoPtr pInfo,
+					      struct libinput_device *device,
+					      struct xorg_list *points)
+{
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	uint32_t supported;
+	char *str, *s;
+
+	xorg_list_init(points);
+
+	if (!libinput_device_config_accel_is_available(device))
+		return;
+
+	supported = libinput_device_config_accel_get_profiles(device);
+	if ((supported & LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE) == 0)
+		return;
+
+	str = xf86SetStrOption(pInfo->options, "AccelCurvePoints", NULL);
+	if (!str)
+		return;
+
+	s = str;
+	while (s) {
+		char *token = strtok_r(s, " ", &s);
+		struct curve_point *p;
+		int nparsed;
+
+		if (!token)
+			break;
+
+		p = calloc(1, sizeof(*p));
+		if (!p)
+			break;
+
+		nparsed = sscanf(token, "%f:%f", &p->x, &p->fx);
+		if (nparsed != 2) {
+			xf86IDrvMsg(pInfo, X_ERROR,
+				    "Failed to parse curve points: %s\n",  str);
+			free(p);
+			break;
+		}
+
+		xorg_list_append(&p->node, points);
+		libinput_device_config_accel_set_curve_point(device, p->x, p->fx);
+	}
+
+	free(str);
+#endif
 }
 
 static inline BOOL
@@ -3080,6 +3172,8 @@ xf86libinput_parse_options(InputInfoPtr pInfo,
 	options->disable_while_typing = xf86libinput_parse_disablewhiletyping_option(pInfo, device);
 	options->rotation_angle = xf86libinput_parse_rotation_angle_option(pInfo, device);
 	xf86libinput_parse_calibration_option(pInfo, device, driver_data->options.matrix);
+	xf86libinput_parse_accel_curve_points_options(pInfo, device,
+						      &driver_data->options.curve_points);
 
 	/* non-libinput options */
 	xf86libinput_parse_buttonmap_option(pInfo,
@@ -3556,6 +3650,7 @@ static Atom prop_draglock;
 static Atom prop_horiz_scroll;
 static Atom prop_pressurecurve;
 static Atom prop_area_ratio;
+static Atom prop_accel_curve_points;
 
 /* general properties */
 static Atom prop_float;
@@ -3882,7 +3977,7 @@ LibinputSetPropertyAccelProfile(DeviceIntPtr dev,
 	BOOL* data;
 	uint32_t profiles = 0;
 
-	if (val->format != 8 || val->size != 2 || val->type != XA_INTEGER)
+	if (val->format != 8 || val->size < 2 || val->size > 3 || val->type != XA_INTEGER)
 		return BadMatch;
 
 	data = (BOOL*)val->data;
@@ -3891,6 +3986,10 @@ LibinputSetPropertyAccelProfile(DeviceIntPtr dev,
 		profiles |= LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 	if (data[1])
 		profiles |= LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	if (val->size > 2 && data[2])
+		profiles |= LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE;
+#endif
 
 	if (checkonly) {
 		uint32_t supported;
@@ -4456,6 +4555,64 @@ LibinputSetPropertyAreaRatio(DeviceIntPtr dev,
 	return Success;
 }
 
+static inline int
+LibinputSetPropertyAccelCurvePoints(DeviceIntPtr dev,
+				    Atom atom,
+				    XIPropertyValuePtr val,
+				    BOOL checkonly)
+{
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	InputInfoPtr pInfo = dev->public.devicePrivate;
+	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->shared_device->device;
+	float *vals;
+
+	if (val->format != 32 || val->size % 2 != 0 || val->type != prop_float)
+		return BadMatch;
+
+	vals = val->data;
+
+	if (val->size >= 128) /* 128 curve points is enough for everybody */
+		return BadMatch;
+
+	if (checkonly) {
+		uint32_t supported;
+
+		supported = libinput_device_config_accel_get_profiles(device);
+		if ((supported & LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE) == 0)
+			return BadMatch;
+
+		for (size_t i = 0; i < val->size; i++) {
+			if (vals[i] < 0.0)
+				return BadValue;
+		}
+	} else {
+		struct curve_point *p, *tmp;
+
+		xorg_list_for_each_entry_safe(p, tmp,
+					      &driver_data->options.curve_points,
+					      node) {
+			xorg_list_del(&p->node);
+			free(p);
+		}
+		xorg_list_init(&driver_data->options.curve_points);
+
+		for (size_t i = 0; i < val->size; i += 2) {
+			p = calloc(1, sizeof(*p));
+			if (!p)
+				break;
+
+			p->x = vals[i];
+			p->fx = vals[i+1];
+			xorg_list_append(&p->node,
+					 &driver_data->options.curve_points);
+		}
+	}
+
+#endif
+	return Success;
+}
+
 static int
 LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
                  BOOL checkonly)
@@ -4512,6 +4669,8 @@ LibinputSetProperty(DeviceIntPtr dev, Atom atom, XIPropertyValuePtr val,
 		rc = LibinputSetPropertyPressureCurve(dev, atom, val, checkonly);
 	else if (atom == prop_area_ratio)
 		rc = LibinputSetPropertyAreaRatio(dev, atom, val, checkonly);
+	else if (atom == prop_accel_curve_points)
+		rc = LibinputSetPropertyAccelCurvePoints(dev, atom, val, checkonly);
 	else if (atom == prop_device || atom == prop_product_id ||
 		 atom == prop_tap_default ||
 		 atom == prop_tap_drag_default ||
@@ -4750,7 +4909,7 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 	float speed = driver_data->options.speed;
 	uint32_t profile_mask;
 	enum libinput_config_accel_profile profile;
-	BOOL profiles[2] = {FALSE};
+	BOOL profiles[3] = {FALSE};
 
 	if (!subdevice_has_capabilities(dev, CAP_POINTER))
 		return;
@@ -4780,6 +4939,10 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 		profiles[0] = TRUE;
 	if (profile_mask & LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE)
 		profiles[1] = TRUE;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	if (profile_mask & LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE)
+		profiles[2] = TRUE;
+#endif
 
 	prop_accel_profiles_available = LibinputMakeProperty(dev,
 							     LIBINPUT_PROP_ACCEL_PROFILES_AVAILABLE,
@@ -4799,6 +4962,11 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 	case LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT:
 		profiles[1] = TRUE;
 		break;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	case LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE:
+		profiles[2] = TRUE;
+		break;
+#endif
 	default:
 		break;
 	}
@@ -4821,6 +4989,11 @@ LibinputInitAccelProperty(DeviceIntPtr dev,
 	case LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT:
 		profiles[1] = TRUE;
 		break;
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	case LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE:
+		profiles[2] = TRUE;
+		break;
+#endif
 	default:
 		break;
 	}
@@ -5424,6 +5597,55 @@ LibinputInitTabletAreaRatioProperty(DeviceIntPtr dev,
 }
 
 static void
+LibinputInitAccelCurvePointsProperty(DeviceIntPtr dev,
+				     struct xf86libinput *driver_data,
+				     struct libinput_device *device)
+{
+#if HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE
+	struct curve_point *p;
+	uint32_t supported;
+	float *data = NULL;
+	int npoints, idx;
+
+	if (!subdevice_has_capabilities(dev, CAP_POINTER))
+		return;
+
+	if (!libinput_device_config_accel_is_available(device))
+		return;
+
+	supported = libinput_device_config_accel_get_profiles(device);
+	if ((supported & LIBINPUT_CONFIG_ACCEL_PROFILE_DEVICE_SPEED_CURVE) == 0)
+		return;
+
+	npoints = 0;
+	xorg_list_for_each_entry(p, &driver_data->options.curve_points, node)
+		npoints++;
+
+	if (npoints > 0) {
+		npoints = min(npoints, 128);
+		data = alloca(npoints * 2 * sizeof *data);
+		idx = 0;
+		xorg_list_for_each_entry(p, &driver_data->options.curve_points, node) {
+			data[idx++] = p->x;
+			data[idx++] = p->fx;
+
+			if (idx >= npoints)
+				break;
+
+		}
+	}
+
+	prop_accel_curve_points = LibinputMakeProperty(dev,
+						       LIBINPUT_PROP_ACCEL_CURVE_POINTS,
+						       prop_float, 32,
+						       npoints, data);
+	if (!prop_accel_curve_points)
+		return;
+
+#endif
+}
+
+static void
 LibinputInitProperty(DeviceIntPtr dev)
 {
 	InputInfoPtr pInfo  = dev->public.devicePrivate;
@@ -5481,4 +5703,5 @@ LibinputInitProperty(DeviceIntPtr dev)
 	LibinputInitHorizScrollProperty(dev, driver_data);
 	LibinputInitPressureCurveProperty(dev, driver_data);
 	LibinputInitTabletAreaRatioProperty(dev, driver_data);
+	LibinputInitAccelCurvePointsProperty(dev, driver_data, device);
 }
