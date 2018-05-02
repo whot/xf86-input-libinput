@@ -47,11 +47,11 @@ XORG_DEFAULT_OPTIONS
 PKG_CHECK_MODULES(XORG, [xorg-server >= 1.10] xproto [inputproto >= 2.2])
 PKG_CHECK_MODULES(LIBINPUT, [libinput >= 1.4.901])
 
-AC_MSG_CHECKING([if libinput_device_config_accel_set_curve_point is available])
 OLD_LIBS=$LIBS
 OLD_CFLAGS=$CFLAGS
 LIBS="$LIBS $LIBINPUT_LIBS"
 CFLAGS="$CFLAGS $LIBINPUT_CFLAGS"
+AC_MSG_CHECKING([if libinput_device_config_accel_set_curve_point is available])
 AC_LINK_IFELSE(
                [AC_LANG_PROGRAM([[#include <libinput.h>]],
                                 [[libinput_device_config_accel_set_curve_point(NULL, 0, 0)]])],
@@ -61,6 +61,16 @@ AC_LINK_IFELSE(
                 [libinput_have_custom_accel_curve=yes]],
                [AC_MSG_RESULT([no])
                 [libinput_have_custom_accel_curve=no]])
+AC_MSG_CHECKING([if libinput_device_touch_get_touch_count is available])
+AC_LINK_IFELSE(
+               [AC_LANG_PROGRAM([[#include <libinput.h>]],
+                                [[libinput_device_touch_get_touch_count(NULL)]])],
+               [AC_MSG_RESULT([yes])
+                AC_DEFINE(HAVE_LIBINPUT_TOUCH_COUNT, [1],
+                          [libinput_device_touch_get_touch_count() is available])
+                [libinput_have_touch_count=yes]],
+               [AC_MSG_RESULT([no])
+                [libinput_have_touch_count=no]])
 LIBS=$OLD_LIBS
 CFLAGS=$OLD_CFLAGS
 

@@ -1095,11 +1095,13 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 {
 	DeviceIntPtr dev = pInfo->dev;
 	struct xf86libinput *driver_data = pInfo->private;
+	struct libinput_device *device = driver_data->shared_device->device;
 	int min, max, res;
 	unsigned char btnmap[MAX_BUTTONS + 1];
 	Atom btnlabels[MAX_BUTTONS];
 	Atom axislabels[TOUCHPAD_NUM_AXES];
 	int nbuttons = 7;
+	int ntouches = TOUCH_MAX_SLOTS;
 
 	init_button_map(btnmap, ARRAY_SIZE(btnmap));
 	init_button_labels(btnlabels, ARRAY_SIZE(btnlabels));
@@ -1123,7 +1125,13 @@ xf86libinput_init_touch(InputInfoPtr pInfo)
 	xf86InitValuatorAxisStruct(dev, 1,
 			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_MT_POSITION_Y),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
-	InitTouchClassDeviceStruct(dev, TOUCH_MAX_SLOTS, XIDirectTouch, 2);
+
+#if HAVE_LIBINPUT_TOUCH_COUNT
+	ntouches = libinput_device_touch_get_touch_count(device);
+	if (ntouches == 0) /* unknown -  mtdev */
+		ntouches = TOUCH_MAX_SLOTS;
+#endif
+	InitTouchClassDeviceStruct(dev, ntouches, XIDirectTouch, 2);
 
 }
 
