@@ -51,16 +51,6 @@ OLD_LIBS=$LIBS
 OLD_CFLAGS=$CFLAGS
 LIBS="$LIBS $LIBINPUT_LIBS"
 CFLAGS="$CFLAGS $LIBINPUT_CFLAGS"
-AC_MSG_CHECKING([if libinput_device_config_accel_set_curve_point is available])
-AC_LINK_IFELSE(
-               [AC_LANG_PROGRAM([[#include <libinput.h>]],
-                                [[libinput_device_config_accel_set_curve_point(NULL, 0, 0)]])],
-               [AC_MSG_RESULT([yes])
-                AC_DEFINE(HAVE_LIBINPUT_CUSTOM_ACCEL_CURVE, [1],
-                          [libinput_device_config_accel_set_curve_point() is available])
-                [libinput_have_custom_accel_curve=yes]],
-               [AC_MSG_RESULT([no])
-                [libinput_have_custom_accel_curve=no]])
 AC_MSG_CHECKING([if libinput_device_touch_get_touch_count is available])
 AC_LINK_IFELSE(
                [AC_LANG_PROGRAM([[#include <libinput.h>]],

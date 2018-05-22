@@ -73,14 +73,6 @@
    only one is enabled at a time at max */
 #define LIBINPUT_PROP_ACCEL_PROFILE_ENABLED "libinput Accel Profile Enabled"
 
-/* Pointer accel custom curve: FLOAT, n values for n>=0 && n%2 == 0, where
-   each pair of values are the x/y coordinates of the acceleration curve.
-   The exact behavior depends on the acceleration profile.
-
-   This property should be considered write-only, the value of the property may
-   not reflect the actual curve points used in libinput. */
-#define LIBINPUT_PROP_ACCEL_CURVE_POINTS "libinput Accel Curve Points"
-
 /* Natural scrolling: BOOL, 1 value */
 #define LIBINPUT_PROP_NATURAL_SCROLL "libinput Natural Scrolling Enabled"
 
