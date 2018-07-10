@@ -5326,7 +5326,7 @@ LibinputInitDragLockProperty(DeviceIntPtr dev,
 		break;
 	case DRAGLOCK_PAIRS:
 		sz = draglock_get_pairs(&driver_data->draglock,
-					dl_values, sizeof(dl_values));
+					dl_values, ARRAY_SIZE(dl_values));
 		break;
 	default:
 		xf86IDrvMsg(dev->public.devicePrivate,

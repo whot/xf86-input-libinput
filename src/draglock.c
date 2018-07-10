@@ -116,7 +116,7 @@ draglock_get_meta(const struct draglock *dl)
 }
 
 size_t
-draglock_get_pairs(const struct draglock *dl, int *array, size_t sz)
+draglock_get_pairs(const struct draglock *dl, int *array, size_t nelem)
 {
 	unsigned int i;
 	size_t last = 0;
@@ -131,8 +131,8 @@ draglock_get_pairs(const struct draglock *dl, int *array, size_t sz)
 	}
 
 	/* size N array with a[0] == 0, the rest ordered by button number */
-	memset(array, 0, sz * sizeof(array[0]));
-	for (i = 0; i < sz && i < ARRAY_SIZE(dl->lock_pair); i++) {
+	memset(array, 0, nelem * sizeof(array[0]));
+	for (i = 0; i < nelem && i < ARRAY_SIZE(dl->lock_pair); i++) {
 		array[i] = dl->lock_pair[i];
 		if (array[i] != 0 && i > last)
 			last = i;
@@ -153,20 +153,20 @@ draglock_set_meta(struct draglock *dl, int meta_button)
 }
 
 int
-draglock_set_pairs(struct draglock *dl, const int *array, size_t sz)
+draglock_set_pairs(struct draglock *dl, const int *array, size_t nelem)
 {
 	unsigned int i;
 
-	if (sz == 0 || array[0] != 0)
+	if (nelem == 0 || array[0] != 0)
 		return 1;
 
-	for (i = 0; i < sz; i++) {
+	for (i = 0; i < nelem; i++) {
 		if (array[i] < 0 || array[i] >= DRAGLOCK_MAX_BUTTONS)
 			return 1;
 	}
 
 	dl->mode = DRAGLOCK_DISABLED;
-	for (i = 0; i < sz; i++) {
+	for (i = 0; i < nelem; i++) {
 		dl->lock_pair[i] = array[i];
 		if (dl->lock_pair[i])
 			dl->mode = DRAGLOCK_PAIRS;

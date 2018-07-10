@@ -107,13 +107,13 @@ draglock_get_meta(const struct draglock *dl);
  * @note Button numbers start at 1, array[0] is always 0.
  *
  * @param[in|out] array Caller-allocated array to hold the button mappings.
- * @param[in] sz Maximum number of elements in array
+ * @param[in] nelem Maximum number of elements in array
  *
  * @return The number of valid elements in array or 0 if the current mode is
  * not DRAGLOCK_PAIRS
  */
 size_t
-draglock_get_pairs(const struct draglock *dl, int *array, size_t sz);
+draglock_get_pairs(const struct draglock *dl, int *array, size_t nelem);
 
 /**
  * Set the drag lock config to the DRAGLOCK_META mode, with the given
@@ -140,7 +140,7 @@ draglock_set_meta(struct draglock *dl, int meta_button);
  * @return 0 on successor nonzero otherwise
  */
 int
-draglock_set_pairs(struct draglock *dl, const int *array, size_t sz);
+draglock_set_pairs(struct draglock *dl, const int *array, size_t nelem);
 
 /**
  * Process the given button event through the drag lock state machine.
