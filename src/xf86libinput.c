@@ -2922,7 +2922,7 @@ xf86libinput_parse_draglock_option(InputInfoPtr pInfo,
 {
 	char *str;
 
-	str = xf86SetStrOption(pInfo->options, "DragLockButtons",NULL);
+	str = xf86SetStrOption(pInfo->options, "DragLockButtons", NULL);
 	if (draglock_init_from_string(&driver_data->draglock, str) != 0)
 		xf86IDrvMsg(pInfo, X_ERROR,
 			    "Invalid DragLockButtons option: \"%s\"\n",
