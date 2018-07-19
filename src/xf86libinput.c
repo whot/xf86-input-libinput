@@ -2092,7 +2092,7 @@ static inline DeviceIntPtr
 xf86libinput_find_device_for_tool(InputInfoPtr pInfo,
 				  struct libinput_tablet_tool *tool)
 {
-	struct xf86libinput *dev = pInfo->private;
+	struct xf86libinput *dev;
 	struct xf86libinput *driver_data = pInfo->private;
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
 	uint64_t serial = libinput_tablet_tool_get_serial(tool);
