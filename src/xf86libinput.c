@@ -1705,7 +1705,7 @@ xf86libinput_handle_touch(InputInfoPtr pInfo,
 	if ((driver_data->capabilities & CAP_TOUCH) == 0)
 		return;
 
-	slot = libinput_event_touch_get_slot(event);
+	slot = libinput_event_touch_get_seat_slot(event);
 
 	switch (event_type) {
 		case LIBINPUT_EVENT_TOUCH_DOWN:
