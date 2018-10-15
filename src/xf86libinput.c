@@ -398,7 +398,7 @@ xf86libinput_shared_disable(struct xf86libinput_device *shared_device)
 
 	libinput_device_set_user_data(device, NULL);
 	libinput_path_remove_device(device);
-	device = libinput_device_unref(device);
+	libinput_device_unref(device);
 	shared_device->device = NULL;
 }
 
@@ -3624,13 +3624,13 @@ update_mode_prop_cb(ClientPtr client, pointer closure)
 	groups[idx] = mode;
 
 	driver_data->allow_mode_group_updates = true;
-	rc = XIChangeDeviceProperty(pInfo->dev,
-				    prop_mode_groups,
-				    XA_INTEGER, 8,
-				    PropModeReplace,
-				    val->size,
-				    groups,
-				    TRUE);
+	XIChangeDeviceProperty(pInfo->dev,
+			       prop_mode_groups,
+			       XA_INTEGER, 8,
+			       PropModeReplace,
+			       val->size,
+			       groups,
+			       TRUE);
 	driver_data->allow_mode_group_updates = false;
 
 out:
