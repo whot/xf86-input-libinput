@@ -128,11 +128,10 @@ struct xf86libinput {
 	uint32_t capabilities;
 
 	struct {
-		int vdist;
-		int hdist;
-
-		double vdist_fraction;
-		double hdist_fraction;
+		struct scroll_axis {
+			int dist;
+			double fraction;
+		} v, h;
 	} scroll;
 
 	struct {
@@ -936,8 +935,8 @@ xf86libinput_init_pointer(InputInfoPtr pInfo)
 			           XIGetKnownProperty(AXIS_LABEL_PROP_REL_Y),
 				   min, max, res * 1000, 0, res * 1000, Relative);
 
-	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.hdist, 0);
-	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.vdist, 0);
+	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.h.dist, 0);
+	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.v.dist, 0);
 
 	return Success;
 }
@@ -984,8 +983,8 @@ xf86libinput_init_pointer_absolute(InputInfoPtr pInfo)
 			           XIGetKnownProperty(AXIS_LABEL_PROP_ABS_Y),
 				   min, max, res * 1000, 0, res * 1000, Absolute);
 
-	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.hdist, 0);
-	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.vdist, 0);
+	SetScrollValuator(dev, 2, SCROLL_TYPE_HORIZONTAL, driver_data->scroll.h.dist, 0);
+	SetScrollValuator(dev, 3, SCROLL_TYPE_VERTICAL, driver_data->scroll.v.dist, 0);
 
 	driver_data->has_abs = TRUE;
 
@@ -1571,24 +1570,24 @@ get_scroll_fraction(struct xf86libinput *driver_data,
 		    struct libinput_event_pointer *event,
 		    enum libinput_pointer_axis axis)
 {
-	double *fraction;
+	struct scroll_axis *s;
 	double f;
 	double angle;
 	int discrete;
 
 	switch (axis) {
 	case LIBINPUT_POINTER_AXIS_SCROLL_HORIZONTAL:
-		fraction = &driver_data->scroll.hdist_fraction;
+		s = &driver_data->scroll.h;
 		break;
 	case LIBINPUT_POINTER_AXIS_SCROLL_VERTICAL:
-		fraction = &driver_data->scroll.vdist_fraction;
+		s = &driver_data->scroll.v;
 		break;
 	default:
 		return 0.0;
 	}
 
-	if (*fraction != 0.0)
-		return *fraction;
+	if (s->fraction != 0.0)
+		return s->fraction;
 
 	/* Calculate the angle per single scroll event */
 	angle = libinput_event_pointer_get_axis_value(event, axis);
@@ -1597,7 +1596,7 @@ get_scroll_fraction(struct xf86libinput *driver_data,
 
 	/* We only do magic for click angles smaller than 10 degrees */
 	if (angle >= 10) {
-		*fraction = 1.0;
+		s->fraction = 1.0;
 		return 1.0;
 	}
 
@@ -1609,7 +1608,7 @@ get_scroll_fraction(struct xf86libinput *driver_data,
 	 */
 	f = round(15.0/angle);
 
-	*fraction = f;
+	s->fraction = f;
 
 	return f;
 }
@@ -1632,7 +1631,7 @@ calculate_axis_value(struct xf86libinput *driver_data,
 
 		value = libinput_event_pointer_get_axis_value_discrete(event, axis);
 		scroll_fraction = get_scroll_fraction(driver_data, event, axis);
-		value *= driver_data->scroll.vdist/scroll_fraction;
+		value *= driver_data->scroll.v.dist/scroll_fraction;
 	} else {
 		value = libinput_event_pointer_get_axis_value(event, axis);
 	}
@@ -3401,8 +3400,8 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	 * affect touchpad scroll speed. For wheels it doesn't matter as
 	 * we're using the discrete value only.
 	 */
-	driver_data->scroll.vdist = 15;
-	driver_data->scroll.hdist = 15;
+	driver_data->scroll.v.dist = 15;
+	driver_data->scroll.h.dist = 15;
 
 	if (!is_subdevice) {
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
