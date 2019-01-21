@@ -1564,6 +1564,10 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *even
  * e.g. a 2 degree click angle requires 8 clicks before a legacy event is
  * sent, but each of those clicks will send XI2.1 smooth scroll data for
  * compatible clients.
+ *
+ * Starting with kernel v5.0 we should get REL_WHEEL_HI_RES from those
+ * devices for the fine-grained scrolling and REL_WHEEL for the normal one,
+ * so the use-case above shouldn't matter anymore.
  */
 static inline double
 get_wheel_scroll_value(struct xf86libinput *driver_data,
@@ -1589,8 +1593,21 @@ get_wheel_scroll_value(struct xf86libinput *driver_data,
 	angle = libinput_event_pointer_get_axis_value(event, axis);
 	discrete = libinput_event_pointer_get_axis_value_discrete(event, axis);
 
+	/* We only need to guess the fraction on the first set of
+	 * scroll events until a discrete value arrives. Once known, we
+	 * re-use the fraction until the device goes away.
+	 */
 	if (s->fraction != 0.0)
 		goto out;
+
+	/* if we get a discrete of 0, assume REL_WHEEL_HI_RES exists and
+	 * normal scroll events are sent correctly, so skip all the
+	 * guesswork.
+	 */
+	if (discrete == 0) {
+		s->fraction = 1.0;
+		goto out;
+	}
 
 	/* Calculate the angle per single scroll event */
 	angle /= discrete;
