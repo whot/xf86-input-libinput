@@ -1566,9 +1566,9 @@ xf86libinput_handle_key(InputInfoPtr pInfo, struct libinput_event_keyboard *even
  * compatible clients.
  */
 static inline double
-get_scroll_fraction(struct xf86libinput *driver_data,
-		    struct libinput_event_pointer *event,
-		    enum libinput_pointer_axis axis)
+get_wheel_scroll_value(struct xf86libinput *driver_data,
+		       struct libinput_event_pointer *event,
+		       enum libinput_pointer_axis axis)
 {
 	struct scroll_axis *s;
 	double f;
@@ -1586,18 +1586,19 @@ get_scroll_fraction(struct xf86libinput *driver_data,
 		return 0.0;
 	}
 
-	if (s->fraction != 0.0)
-		return s->fraction;
-
-	/* Calculate the angle per single scroll event */
 	angle = libinput_event_pointer_get_axis_value(event, axis);
 	discrete = libinput_event_pointer_get_axis_value_discrete(event, axis);
+
+	if (s->fraction != 0.0)
+		goto out;
+
+	/* Calculate the angle per single scroll event */
 	angle /= discrete;
 
 	/* We only do magic for click angles smaller than 10 degrees */
 	if (angle >= 10) {
 		s->fraction = 1.0;
-		return 1.0;
+		goto out;
 	}
 
 	/* Figure out something that gets close to 15 degrees (the general
@@ -1610,7 +1611,8 @@ get_scroll_fraction(struct xf86libinput *driver_data,
 
 	s->fraction = f;
 
-	return f;
+out:
+	return s->dist/s->fraction * discrete;
 }
 
 static inline bool
@@ -1627,11 +1629,7 @@ calculate_axis_value(struct xf86libinput *driver_data,
 
 	source = libinput_event_pointer_get_axis_source(event);
 	if (source == LIBINPUT_POINTER_AXIS_SOURCE_WHEEL) {
-		double scroll_fraction;
-
-		value = libinput_event_pointer_get_axis_value_discrete(event, axis);
-		scroll_fraction = get_scroll_fraction(driver_data, event, axis);
-		value *= driver_data->scroll.v.dist/scroll_fraction;
+		value = get_wheel_scroll_value(driver_data, event, axis);
 	} else {
 		value = libinput_event_pointer_get_axis_value(event, axis);
 	}
