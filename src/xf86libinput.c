@@ -3415,8 +3415,8 @@ xf86libinput_pre_init(InputDriverPtr drv,
 	 * affect touchpad scroll speed. For wheels it doesn't matter as
 	 * we're using the discrete value only.
 	 */
-	driver_data->scroll.v.dist = 15;
-	driver_data->scroll.h.dist = 15;
+	driver_data->scroll.v.dist = 120;
+	driver_data->scroll.h.dist = 120;
 
 	if (!is_subdevice) {
 		if (libinput_device_has_capability(device, LIBINPUT_DEVICE_CAP_POINTER))
