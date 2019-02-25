@@ -1791,7 +1791,9 @@ xf86libinput_pick_device(struct xf86libinput_device *shared_device,
 			if (libinput_tablet_tool_get_serial(driver_data->tablet_tool) ==
 			    libinput_tablet_tool_get_serial(tool) &&
 			    libinput_tablet_tool_get_tool_id(driver_data->tablet_tool) ==
-			    libinput_tablet_tool_get_tool_id(tool))
+			    libinput_tablet_tool_get_tool_id(tool) &&
+			    libinput_tablet_tool_get_type(driver_data->tablet_tool) ==
+			    libinput_tablet_tool_get_type(tool))
 				return driver_data->pInfo;
 		}
 	}
@@ -2111,13 +2113,15 @@ xf86libinput_find_device_for_tool(InputInfoPtr pInfo,
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
 	uint64_t serial = libinput_tablet_tool_get_serial(tool);
 	uint64_t tool_id = libinput_tablet_tool_get_tool_id(tool);
+	enum libinput_event_type tool_type = libinput_tablet_tool_get_type(tool);
 
 	xorg_list_for_each_entry(dev,
 				 &shared_device->device_list,
 				 shared_device_link) {
 		if (dev->tablet_tool &&
 		    libinput_tablet_tool_get_serial(dev->tablet_tool) == serial &&
-		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id) {
+		    libinput_tablet_tool_get_tool_id(dev->tablet_tool) == tool_id &&
+		    libinput_tablet_tool_get_type(dev->tablet_tool) == tool_type) {
 			return dev->pInfo->dev;
 		}
 	}
