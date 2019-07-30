@@ -2064,6 +2064,7 @@ xf86libinput_create_tool_subdevice(InputInfoPtr pInfo,
 	struct xf86libinput_tablet_tool *t;
 	struct xf86libinput_tablet_tool_event_queue *queue;
 	struct libinput_tablet_tool *tool;
+	enum libinput_tablet_tool_type tool_type;
 	uint64_t serial, tool_id;
 	XF86OptionPtr options = NULL;
 	char name[64];
@@ -2083,12 +2084,14 @@ xf86libinput_create_tool_subdevice(InputInfoPtr pInfo,
 	tool = libinput_event_tablet_tool_get_tool(event);
 	serial = libinput_tablet_tool_get_serial(tool);
 	tool_id = libinput_tablet_tool_get_tool_id(tool);
+	tool_type = libinput_tablet_tool_get_type(tool);
 
 	t->tool = libinput_tablet_tool_ref(tool);
 	xorg_list_append(&t->node, &shared_device->unclaimed_tablet_tool_list);
 
 	options = xf86ReplaceIntOption(options, "_libinput/tablet-tool-serial", serial);
 	options = xf86ReplaceIntOption(options, "_libinput/tablet-tool-id", tool_id);
+	options = xf86ReplaceIntOption(options, "_libinput/tablet-tool-type", tool_type);
 	/* Convert the name to "<base name> <tool type> (serial number)" */
 	if (snprintf(name,
 		     sizeof(name),
@@ -3300,16 +3303,19 @@ claim_tablet_tool(InputInfoPtr pInfo)
 	struct xf86libinput_device *shared_device = driver_data->shared_device;
 	struct xf86libinput_tablet_tool_event_queue *queue;
 	struct xf86libinput_tablet_tool *t;
+	enum libinput_tablet_tool_type tool_type;
 	uint64_t serial, tool_id;
 
 	serial = (uint32_t)xf86CheckIntOption(pInfo->options, "_libinput/tablet-tool-serial", 0);
 	tool_id = (uint32_t)xf86CheckIntOption(pInfo->options, "_libinput/tablet-tool-id", 0);
+	tool_type = (uint32_t)xf86CheckIntOption(pInfo->options, "_libinput/tablet-tool-type", 0);
 
 	xorg_list_for_each_entry(t,
 				 &shared_device->unclaimed_tablet_tool_list,
 				 node) {
 		if (libinput_tablet_tool_get_serial(t->tool) == serial &&
-		    libinput_tablet_tool_get_tool_id(t->tool) == tool_id) {
+		    libinput_tablet_tool_get_tool_id(t->tool) == tool_id &&
+		    libinput_tablet_tool_get_type(t->tool) == tool_type) {
 			driver_data->tablet_tool = t->tool;
 			queue = libinput_tablet_tool_get_user_data(t->tool);
 			if (queue)
